@@ -46,6 +46,31 @@ function ScreenshotImage({ src, cornerRadius }: { src: string; cornerRadius: num
   );
 }
 
+function BackgroundImage({ src, width, height }: { src: string; width: number; height: number }) {
+  const [image] = useImage(src);
+
+  if (!image) return null;
+
+  // Calculate scale to cover the area
+  const scaleX = width / image.width;
+  const scaleY = height / image.height;
+  const scale = Math.max(scaleX, scaleY);
+  const scaledWidth = image.width * scale;
+  const scaledHeight = image.height * scale;
+  const offsetX = (width - scaledWidth) / 2;
+  const offsetY = (height - scaledHeight) / 2;
+
+  return (
+    <KonvaImage
+      image={image}
+      x={offsetX}
+      y={offsetY}
+      width={scaledWidth}
+      height={scaledHeight}
+    />
+  );
+}
+
 export function EditorCanvas({
   screenshot,
   padding,
@@ -140,12 +165,12 @@ export function EditorCanvas({
         type: 'text',
         x,
         y,
-        width: 100,
-        height: 24,
+        width: 200,
+        height: 60,
         stroke: strokeColor,
         strokeWidth,
         text: 'Text',
-        fontSize: 16,
+        fontSize: 48,
         fontFamily: 'Arial',
         fontStyle: 'normal',
         textAlign: 'left',
@@ -249,8 +274,9 @@ export function EditorCanvas({
   const stageWidth = totalWidth * scale;
   const stageHeight = totalHeight * scale;
 
-  // Check if background is a gradient
+  // Check if background is a gradient or image
   const isGradient = backgroundColor.includes('gradient');
+  const isImageBackground = backgroundColor.startsWith('url(');
 
   return (
     <div ref={containerRef} className="flex-1 overflow-auto p-10">
@@ -277,7 +303,7 @@ export function EditorCanvas({
         >
           <Layer>
             {/* Background (for export - only if solid color) */}
-            {!isGradient && (
+            {!isGradient && !isImageBackground && (
               <Rect
                 x={0}
                 y={0}
@@ -285,6 +311,23 @@ export function EditorCanvas({
                 height={totalHeight}
                 fill={backgroundColor}
               />
+            )}
+
+            {/* Background image (for export) */}
+            {isImageBackground && (
+              <Group
+                clipFunc={(ctx) => {
+                  ctx.beginPath();
+                  ctx.rect(0, 0, totalWidth, totalHeight);
+                  ctx.closePath();
+                }}
+              >
+                <BackgroundImage
+                  src={backgroundColor.slice(4, -1)}
+                  width={totalWidth}
+                  height={totalHeight}
+                />
+              </Group>
             )}
 
             {/* Screenshot with shadow */}

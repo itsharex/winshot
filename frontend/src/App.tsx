@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Konva from 'konva';
 import { CaptureToolbar } from './components/capture-toolbar';
 import { WindowPicker } from './components/window-picker';
+import { RegionSelector } from './components/region-selector';
 import { EditorCanvas } from './components/editor-canvas';
 import { SettingsPanel } from './components/settings-panel';
 import { SettingsModal } from './components/settings-modal';
@@ -26,6 +27,8 @@ function App() {
   const [screenshot, setScreenshot] = useState<CaptureResult | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
+  const [showRegionSelector, setShowRegionSelector] = useState(false);
+  const [displayBounds, setDisplayBounds] = useState({ width: 1920, height: 1080 });
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
 
   // Editor settings
@@ -57,6 +60,14 @@ function App() {
       return;
     }
 
+    if (mode === 'region') {
+      // Show region selector overlay
+      const bounds = await GetDisplayBounds(0);
+      setDisplayBounds({ width: bounds.width, height: bounds.height });
+      setShowRegionSelector(true);
+      return;
+    }
+
     setIsCapturing(true);
     setStatusMessage('Capturing...');
 
@@ -65,16 +76,6 @@ function App() {
 
       if (mode === 'fullscreen') {
         result = await CaptureFullscreen() as CaptureResult;
-      } else if (mode === 'region') {
-        // For now, capture a predefined region (center of screen)
-        // TODO: Implement region selection overlay
-        const bounds = await GetDisplayBounds(0);
-        const regionWidth = Math.floor(bounds.width * 0.6);
-        const regionHeight = Math.floor(bounds.height * 0.6);
-        const x = Math.floor((bounds.width - regionWidth) / 2);
-        const y = Math.floor((bounds.height - regionHeight) / 2);
-
-        result = await CaptureRegion(x, y, regionWidth, regionHeight) as CaptureResult;
       } else {
         throw new Error('Invalid capture mode');
       }
@@ -108,6 +109,24 @@ function App() {
     setIsCapturing(false);
   };
 
+  const handleRegionSelect = async (x: number, y: number, width: number, height: number) => {
+    setShowRegionSelector(false);
+    setIsCapturing(true);
+    setStatusMessage('Capturing region...');
+
+    try {
+      const result = await CaptureRegion(x, y, width, height) as CaptureResult;
+      setScreenshot(result);
+      setStatusMessage(undefined);
+    } catch (error) {
+      console.error('Region capture failed:', error);
+      setStatusMessage('Capture failed');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+    }
+
+    setIsCapturing(false);
+  };
+
   const handleClear = () => {
     setScreenshot(null);
     setAnnotations([]);
@@ -120,8 +139,11 @@ function App() {
     const handleFullscreen = () => {
       handleCapture('fullscreen');
     };
-    const handleRegion = () => {
-      handleCapture('region');
+    const handleRegion = async () => {
+      // Show region selector overlay
+      const bounds = await GetDisplayBounds(0);
+      setDisplayBounds({ width: bounds.width, height: bounds.height });
+      setShowRegionSelector(true);
     };
     const handleWindow = () => {
       setShowWindowPicker(true);
@@ -157,6 +179,22 @@ function App() {
       prev.map((ann) => (ann.id === id ? { ...ann, ...updates } : ann))
     );
   }, []);
+
+  // Update selected annotation color when stroke color changes
+  const handleStrokeColorChange = useCallback((color: string) => {
+    setStrokeColor(color);
+    if (selectedAnnotationId) {
+      handleAnnotationUpdate(selectedAnnotationId, { stroke: color });
+    }
+  }, [selectedAnnotationId, handleAnnotationUpdate]);
+
+  // Update selected annotation stroke width when it changes
+  const handleStrokeWidthChange = useCallback((width: number) => {
+    setStrokeWidth(width);
+    if (selectedAnnotationId) {
+      handleAnnotationUpdate(selectedAnnotationId, { strokeWidth: width });
+    }
+  }, [selectedAnnotationId, handleAnnotationUpdate]);
 
   const handleDeleteSelected = useCallback(() => {
     if (selectedAnnotationId) {
@@ -394,8 +432,8 @@ function App() {
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}
             onToolChange={handleToolChange}
-            onColorChange={setStrokeColor}
-            onStrokeWidthChange={setStrokeWidth}
+            onColorChange={handleStrokeColorChange}
+            onStrokeWidthChange={handleStrokeWidthChange}
             onDeleteSelected={handleDeleteSelected}
             hasSelection={!!selectedAnnotationId}
           />
@@ -459,6 +497,14 @@ function App() {
         isOpen={showWindowPicker}
         onClose={() => setShowWindowPicker(false)}
         onSelect={handleWindowSelect}
+      />
+
+      <RegionSelector
+        isOpen={showRegionSelector}
+        onClose={() => setShowRegionSelector(false)}
+        onSelect={handleRegionSelect}
+        screenWidth={displayBounds.width}
+        screenHeight={displayBounds.height}
       />
 
       <SettingsModal
