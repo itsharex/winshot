@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"winshot/internal/config"
 	"winshot/internal/hotkeys"
 	"winshot/internal/screenshot"
 	"winshot/internal/tray"
@@ -20,6 +21,7 @@ type App struct {
 	ctx           context.Context
 	hotkeyManager *hotkeys.HotkeyManager
 	trayIcon      *tray.TrayIcon
+	config        *config.Config
 }
 
 // NewApp creates a new App application struct
@@ -31,12 +33,19 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.Default()
+	}
+	a.config = cfg
+
 	// Initialize hotkey manager
 	a.hotkeyManager = hotkeys.NewHotkeyManager()
 	a.hotkeyManager.SetCallback(a.onHotkey)
 
-	// Register default hotkeys (may fail if keys are already registered)
-	a.hotkeyManager.RegisterDefaults()
+	// Register hotkeys from config
+	a.registerHotkeysFromConfig()
 	a.hotkeyManager.Start()
 
 	// Initialize system tray
@@ -264,8 +273,69 @@ type HotkeyConfig struct {
 // GetHotkeyConfig returns the current hotkey configuration
 func (a *App) GetHotkeyConfig() HotkeyConfig {
 	return HotkeyConfig{
-		Fullscreen: "PrintScreen",
-		Region:     "Ctrl+PrintScreen",
-		Window:     "Ctrl+Shift+PrintScreen",
+		Fullscreen: a.config.Hotkeys.Fullscreen,
+		Region:     a.config.Hotkeys.Region,
+		Window:     a.config.Hotkeys.Window,
+	}
+}
+
+// GetConfig returns the current application configuration
+func (a *App) GetConfig() *config.Config {
+	return a.config
+}
+
+// SaveConfig saves the application configuration
+func (a *App) SaveConfig(cfg *config.Config) error {
+	// Update startup setting if changed
+	if cfg.Startup.LaunchOnStartup != a.config.Startup.LaunchOnStartup {
+		if err := config.SetStartupEnabled(cfg.Startup.LaunchOnStartup); err != nil {
+			return err
+		}
+	}
+
+	// Update hotkeys if changed
+	hotkeysChanged := cfg.Hotkeys.Fullscreen != a.config.Hotkeys.Fullscreen ||
+		cfg.Hotkeys.Region != a.config.Hotkeys.Region ||
+		cfg.Hotkeys.Window != a.config.Hotkeys.Window
+
+	// Store new config
+	a.config = cfg
+
+	// Save to disk
+	if err := cfg.Save(); err != nil {
+		return err
+	}
+
+	// Re-register hotkeys if they changed
+	if hotkeysChanged {
+		a.hotkeyManager.UnregisterAll()
+		a.registerHotkeysFromConfig()
+	}
+
+	return nil
+}
+
+// SelectFolder opens a folder selection dialog
+func (a *App) SelectFolder() (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Save Folder",
+	})
+}
+
+// registerHotkeysFromConfig registers hotkeys based on current config
+func (a *App) registerHotkeysFromConfig() {
+	// Parse and register fullscreen hotkey
+	if mods, key, ok := hotkeys.ParseHotkeyString(a.config.Hotkeys.Fullscreen); ok {
+		a.hotkeyManager.Register(hotkeys.HotkeyFullscreen, mods, key)
+	}
+
+	// Parse and register region hotkey
+	if mods, key, ok := hotkeys.ParseHotkeyString(a.config.Hotkeys.Region); ok {
+		a.hotkeyManager.Register(hotkeys.HotkeyRegion, mods, key)
+	}
+
+	// Parse and register window hotkey
+	if mods, key, ok := hotkeys.ParseHotkeyString(a.config.Hotkeys.Window); ok {
+		a.hotkeyManager.Register(hotkeys.HotkeyWindow, mods, key)
 	}
 }

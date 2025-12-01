@@ -1,3 +1,109 @@
+export namespace config {
+	
+	export class ExportConfig {
+	    defaultFormat: string;
+	    jpegQuality: number;
+	    includeBackground: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.defaultFormat = source["defaultFormat"];
+	        this.jpegQuality = source["jpegQuality"];
+	        this.includeBackground = source["includeBackground"];
+	    }
+	}
+	export class QuickSaveConfig {
+	    folder: string;
+	    pattern: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuickSaveConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.folder = source["folder"];
+	        this.pattern = source["pattern"];
+	    }
+	}
+	export class StartupConfig {
+	    launchOnStartup: boolean;
+	    minimizeToTray: boolean;
+	    showNotification: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new StartupConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.launchOnStartup = source["launchOnStartup"];
+	        this.minimizeToTray = source["minimizeToTray"];
+	        this.showNotification = source["showNotification"];
+	    }
+	}
+	export class HotkeyConfig {
+	    fullscreen: string;
+	    region: string;
+	    window: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HotkeyConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fullscreen = source["fullscreen"];
+	        this.region = source["region"];
+	        this.window = source["window"];
+	    }
+	}
+	export class Config {
+	    hotkeys: HotkeyConfig;
+	    startup: StartupConfig;
+	    quickSave: QuickSaveConfig;
+	    export: ExportConfig;
+	
+	    static createFrom(source: any = {}) {
+	        return new Config(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hotkeys = this.convertValues(source["hotkeys"], HotkeyConfig);
+	        this.startup = this.convertValues(source["startup"], StartupConfig);
+	        this.quickSave = this.convertValues(source["quickSave"], QuickSaveConfig);
+	        this.export = this.convertValues(source["export"], ExportConfig);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
+
+}
+
 export namespace main {
 	
 	export class DisplayBounds {

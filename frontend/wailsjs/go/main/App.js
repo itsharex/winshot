@@ -18,6 +18,10 @@ export function CaptureWindow(arg1) {
   return window['go']['main']['App']['CaptureWindow'](arg1);
 }
 
+export function GetConfig() {
+  return window['go']['main']['App']['GetConfig']();
+}
+
 export function GetDisplayBounds(arg1) {
   return window['go']['main']['App']['GetDisplayBounds'](arg1);
 }
@@ -46,8 +50,16 @@ export function QuickSave(arg1, arg2) {
   return window['go']['main']['App']['QuickSave'](arg1, arg2);
 }
 
+export function SaveConfig(arg1) {
+  return window['go']['main']['App']['SaveConfig'](arg1);
+}
+
 export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
+}
+
+export function SelectFolder() {
+  return window['go']['main']['App']['SelectFolder']();
 }
 
 export function ShowWindow() {

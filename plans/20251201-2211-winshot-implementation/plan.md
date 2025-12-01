@@ -39,8 +39,9 @@ Go Backend (Wails)              React Frontend
 | 7 | [Crop & Ratio](./phase-07-crop-ratio.md) | Medium | 3h | Pending |
 | 8 | [Export & Save](./phase-08-export-save.md) | High | 2h | Pending |
 | 9 | [System Integration](./phase-09-system-integration.md) | Medium | 4h | Pending |
+| 10 | [Settings Page](./phase-10-settings-page.md) | Medium | 4h | Pending |
 
-**Total Estimated:** ~31 hours
+**Total Estimated:** ~35 hours
 
 ---
 

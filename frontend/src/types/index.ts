@@ -55,3 +55,34 @@ export interface CropArea {
 }
 
 export type AspectRatio = 'free' | '16:9' | '4:3' | '1:1' | '9:16' | '3:4';
+
+// App configuration types
+export interface HotkeyConfig {
+  fullscreen: string;
+  region: string;
+  window: string;
+}
+
+export interface StartupConfig {
+  launchOnStartup: boolean;
+  minimizeToTray: boolean;
+  showNotification: boolean;
+}
+
+export interface QuickSaveConfig {
+  folder: string;
+  pattern: 'timestamp' | 'date' | 'increment';
+}
+
+export interface ExportConfig {
+  defaultFormat: 'png' | 'jpeg';
+  jpegQuality: number;
+  includeBackground: boolean;
+}
+
+export interface AppConfig {
+  hotkeys: HotkeyConfig;
+  startup: StartupConfig;
+  quickSave: QuickSaveConfig;
+  export: ExportConfig;
+}

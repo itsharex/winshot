@@ -4,6 +4,7 @@ import { CaptureToolbar } from './components/capture-toolbar';
 import { WindowPicker } from './components/window-picker';
 import { EditorCanvas } from './components/editor-canvas';
 import { SettingsPanel } from './components/settings-panel';
+import { SettingsModal } from './components/settings-modal';
 import { StatusBar } from './components/status-bar';
 import { AnnotationToolbar } from './components/annotation-toolbar';
 import { CropToolbar } from './components/crop-toolbar';
@@ -46,6 +47,9 @@ function App() {
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
+
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleCapture = useCallback(async (mode: CaptureMode) => {
     if (mode === 'window') {
@@ -380,6 +384,7 @@ function App() {
         hasScreenshot={!!screenshot}
         onClear={handleClear}
         onMinimize={handleMinimizeToTray}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {screenshot && (
@@ -454,6 +459,11 @@ function App() {
         isOpen={showWindowPicker}
         onClose={() => setShowWindowPicker(false)}
         onSelect={handleWindowSelect}
+      />
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );
