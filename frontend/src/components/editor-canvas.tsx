@@ -276,8 +276,8 @@ export function EditorCanvas({
       setTempAnnotation({
         ...tempAnnotation,
         points: [0, 0, width, height],
-        width: Math.abs(width),
-        height: Math.abs(height),
+        width: width,
+        height: height,
       });
     } else {
       // For rectangle and ellipse, handle negative dimensions
@@ -300,8 +300,8 @@ export function EditorCanvas({
       return;
     }
 
-    // Only add if the shape has some size
-    if (tempAnnotation.width > 5 || tempAnnotation.height > 5) {
+    // Only add if the shape has some size (use Math.abs for arrows/lines with signed dimensions)
+    if (Math.abs(tempAnnotation.width) > 5 || Math.abs(tempAnnotation.height) > 5) {
       onAnnotationAdd(tempAnnotation);
     }
 
