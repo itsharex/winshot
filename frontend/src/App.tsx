@@ -24,6 +24,42 @@ import {
 } from '../wailsjs/go/main/App';
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
+// Storage key for persistent editor settings
+const EDITOR_SETTINGS_KEY = 'winshot-editor-settings';
+
+interface EditorSettings {
+  padding: number;
+  cornerRadius: number;
+  shadowSize: number;
+  backgroundColor: string;
+}
+
+const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
+  padding: 40,
+  cornerRadius: 12,
+  shadowSize: 20,
+  backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+};
+
+// Load settings from localStorage
+function loadEditorSettings(): EditorSettings {
+  try {
+    const stored = localStorage.getItem(EDITOR_SETTINGS_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_EDITOR_SETTINGS, ...parsed };
+    }
+  } catch {
+    // Invalid stored data, use defaults
+  }
+  return DEFAULT_EDITOR_SETTINGS;
+}
+
+// Save settings to localStorage
+function saveEditorSettings(settings: EditorSettings): void {
+  localStorage.setItem(EDITOR_SETTINGS_KEY, JSON.stringify(settings));
+}
+
 function App() {
   const stageRef = useRef<Konva.Stage>(null);
   const [screenshot, setScreenshot] = useState<CaptureResult | null>(null);
@@ -35,11 +71,11 @@ function App() {
   const [regionScaleRatio, setRegionScaleRatio] = useState(1);
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
 
-  // Editor settings
-  const [padding, setPadding] = useState(40);
-  const [cornerRadius, setCornerRadius] = useState(12);
-  const [shadowSize, setShadowSize] = useState(20);
-  const [backgroundColor, setBackgroundColor] = useState('linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
+  // Editor settings (loaded from localStorage with lazy initialization)
+  const [padding, setPadding] = useState(() => loadEditorSettings().padding);
+  const [cornerRadius, setCornerRadius] = useState(() => loadEditorSettings().cornerRadius);
+  const [shadowSize, setShadowSize] = useState(() => loadEditorSettings().shadowSize);
+  const [backgroundColor, setBackgroundColor] = useState(() => loadEditorSettings().backgroundColor);
 
   // Annotation state
   const [activeTool, setActiveTool] = useState<EditorTool>('select');
@@ -57,6 +93,11 @@ function App() {
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
+
+  // Persist editor settings to localStorage when they change
+  useEffect(() => {
+    saveEditorSettings({ padding, cornerRadius, shadowSize, backgroundColor });
+  }, [padding, cornerRadius, shadowSize, backgroundColor]);
 
   const handleCapture = useCallback(async (mode: CaptureMode) => {
     if (mode === 'window') {

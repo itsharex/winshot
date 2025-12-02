@@ -144,7 +144,7 @@ export function SettingsPanel({
         <input
           type="range"
           min="0"
-          max="100"
+          max="200"
           value={cornerRadius}
           onChange={(e) => onCornerRadiusChange(Number(e.target.value))}
           className="w-full accent-blue-500"
