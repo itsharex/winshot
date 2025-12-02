@@ -133,10 +133,7 @@ func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 	// Wait for window to fully hide
 	time.Sleep(150 * time.Millisecond)
 
-	// Get display bounds
-	bounds := screenshot.GetDisplayBounds(0)
-
-	// Capture fullscreen screenshot
+	// Capture fullscreen screenshot (at physical/native resolution)
 	result, err := screenshot.CaptureFullscreen()
 	if err != nil {
 		// Show window again on error
@@ -144,14 +141,32 @@ func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 		return nil, err
 	}
 
-	// Position window at screen origin and make it cover the full screen
-	runtime.WindowSetPosition(a.ctx, bounds.Min.X, bounds.Min.Y)
+	// Get logical screen info from Wails runtime
+	// Wails ScreenGetAll returns logical (DPI-scaled) dimensions
+	screens, _ := runtime.ScreenGetAll(a.ctx)
+	var primaryScreen runtime.Screen
+	for _, s := range screens {
+		if s.IsPrimary {
+			primaryScreen = s
+			break
+		}
+	}
+	if primaryScreen.Size.Width == 0 {
+		// Fallback to first screen if no primary found
+		primaryScreen = screens[0]
+	}
+
+	logicalWidth := primaryScreen.Size.Width
+	logicalHeight := primaryScreen.Size.Height
+
+	// Position window at screen origin (primary monitor is typically at 0,0)
+	runtime.WindowSetPosition(a.ctx, 0, 0)
 
 	// Disable min size constraint temporarily
 	runtime.WindowSetMinSize(a.ctx, 0, 0)
 
-	// Set window size to full screen
-	runtime.WindowSetSize(a.ctx, bounds.Dx(), bounds.Dy())
+	// Set window size to full screen using LOGICAL dimensions
+	runtime.WindowSetSize(a.ctx, logicalWidth, logicalHeight)
 
 	// Make window always on top
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
@@ -160,17 +175,17 @@ func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 	runtime.WindowShow(a.ctx)
 
 	// Calculate DPI scale ratio (physical screenshot size / logical screen size)
-	scaleRatio := float64(result.Width) / float64(bounds.Dx())
+	scaleRatio := float64(result.Width) / float64(logicalWidth)
 	if scaleRatio < 1.0 {
 		scaleRatio = 1.0
 	}
 
 	return &RegionCaptureData{
 		Screenshot:  result,
-		ScreenX:     bounds.Min.X,
-		ScreenY:     bounds.Min.Y,
-		Width:       bounds.Dx(),
-		Height:      bounds.Dy(),
+		ScreenX:     0,
+		ScreenY:     0,
+		Width:       logicalWidth,
+		Height:      logicalHeight,
 		ScaleRatio:  scaleRatio,
 		PhysicalW:   result.Width,
 		PhysicalH:   result.Height,

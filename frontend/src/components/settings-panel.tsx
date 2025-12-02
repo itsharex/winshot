@@ -1,4 +1,7 @@
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
+
+const MAX_BACKGROUND_IMAGES = 8;
+const STORAGE_KEY = 'winshot-background-images';
 
 interface SettingsPanelProps {
   padding: number;
@@ -47,20 +50,59 @@ export function SettingsPanel({
   onBackgroundChange,
 }: SettingsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+
+  // Load images from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const images = JSON.parse(stored);
+        if (Array.isArray(images)) {
+          setUploadedImages(images.slice(0, MAX_BACKGROUND_IMAGES));
+        }
+      } catch {
+        // Invalid stored data, ignore
+      }
+    }
+  }, []);
+
+  // Save images to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(uploadedImages));
+  }, [uploadedImages]);
 
   // Max padding is 1/3 of the smaller dimension
   const maxPadding = Math.floor(Math.min(imageWidth, imageHeight) / 3);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && uploadedImages.length < MAX_BACKGROUND_IMAGES) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
+        setUploadedImages(prev => [...prev, dataUrl]);
         onBackgroundChange(`url(${dataUrl})`);
       };
       reader.readAsDataURL(file);
     }
+    // Reset input so same file can be uploaded again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const imageToRemove = uploadedImages[index];
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    // If the removed image was the active background, reset to first gradient
+    if (backgroundColor === `url(${imageToRemove})`) {
+      onBackgroundChange(GRADIENT_PRESETS[0].value);
+    }
+  };
+
+  const handleSelectImage = (imageUrl: string) => {
+    onBackgroundChange(`url(${imageUrl})`);
   };
 
   return (
@@ -167,7 +209,7 @@ export function SettingsPanel({
       {/* Image Background */}
       <div className="mb-6">
         <label className="block text-sm text-slate-400 mb-2">
-          Image Background
+          Image Background ({uploadedImages.length}/{MAX_BACKGROUND_IMAGES})
         </label>
         <input
           ref={fileInputRef}
@@ -176,22 +218,54 @@ export function SettingsPanel({
           onChange={handleImageUpload}
           className="hidden"
         />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Upload Image
-        </button>
-        {backgroundColor.startsWith('url(') && (
-          <div className="mt-2">
-            <div
-              className="w-full h-16 rounded-lg border-2 border-blue-500 bg-cover bg-center"
-              style={{ backgroundImage: backgroundColor }}
-            />
+
+        {/* Image Gallery Grid */}
+        {uploadedImages.length > 0 && (
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {uploadedImages.map((imageUrl, index) => {
+              const isSelected = backgroundColor === `url(${imageUrl})`;
+              return (
+                <div key={index} className="relative group">
+                  <button
+                    onClick={() => handleSelectImage(imageUrl)}
+                    className={`w-full aspect-square rounded-lg border-2 transition-all bg-cover bg-center
+                      ${isSelected
+                        ? 'border-blue-500 scale-110 z-10'
+                        : 'border-transparent hover:border-slate-500'
+                      }`}
+                    style={{ backgroundImage: `url(${imageUrl})` }}
+                    title={`Image ${index + 1}`}
+                  />
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveImage(index);
+                    }}
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove image"
+                  >
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
           </div>
+        )}
+
+        {/* Upload button - only show if under limit */}
+        {uploadedImages.length < MAX_BACKGROUND_IMAGES && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Upload Image
+          </button>
         )}
       </div>
     </div>
