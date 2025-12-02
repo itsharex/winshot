@@ -5,6 +5,7 @@ import Konva from 'konva';
 import { CaptureResult, Annotation, AnnotationType, EditorTool, CropArea, AspectRatio, OutputRatio } from '../types';
 import { AnnotationShapes } from './annotation-shapes';
 import { CropOverlay } from './crop-overlay';
+import { ImageIcon } from 'lucide-react';
 
 interface EditorCanvasProps {
   screenshot: CaptureResult | null;
@@ -153,7 +154,7 @@ export function EditorCanvas({
 
   const activeStageRef = stageRef || internalStageRef;
 
-  // Update container size on resize
+  // Update container size on resize or when screenshot changes
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
@@ -164,10 +165,11 @@ export function EditorCanvas({
       }
     };
 
-    updateSize();
+    // Use RAF to ensure DOM has rendered
+    requestAnimationFrame(updateSize);
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
-  }, []);
+  }, [screenshot]);
 
   // Calculate scale to fit output in container
   useEffect(() => {
@@ -189,11 +191,28 @@ export function EditorCanvas({
     return `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
 
+  // Helper to check if a node is part of a Transformer
+  const isTransformerNode = useCallback((node: Konva.Node): boolean => {
+    let current: Konva.Node | null = node;
+    while (current) {
+      if (current.getClassName() === 'Transformer') {
+        return true;
+      }
+      current = current.getParent();
+    }
+    return false;
+  }, []);
+
   // Handle mouse down for drawing
   const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     if (activeTool === 'select') {
-      // Check if we clicked on empty space
-      const clickedOnEmpty = e.target === e.target.getStage() || e.target.getClassName() === 'Rect';
+      // Don't deselect if clicking on Transformer handles (resize/rotate anchors)
+      if (isTransformerNode(e.target)) {
+        return;
+      }
+      // Check if we clicked on empty space (Stage or background Rect only)
+      const clickedOnEmpty = e.target === e.target.getStage() ||
+        (e.target.getClassName() === 'Rect' && !e.target.getParent()?.getClassName());
       if (clickedOnEmpty) {
         onAnnotationSelect(null);
       }
@@ -254,7 +273,7 @@ export function EditorCanvas({
       points: annotationType === 'arrow' || annotationType === 'line' ? [0, 0, 0, 0] : undefined,
     };
     setTempAnnotation(newAnnotation);
-  }, [activeTool, scale, strokeColor, strokeWidth, generateId, onAnnotationSelect, onAnnotationAdd]);
+  }, [activeTool, scale, strokeColor, strokeWidth, generateId, onAnnotationSelect, onAnnotationAdd, isTransformerNode]);
 
   // Handle mouse move for drawing
   const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -276,8 +295,8 @@ export function EditorCanvas({
       setTempAnnotation({
         ...tempAnnotation,
         points: [0, 0, width, height],
-        width: Math.abs(width),
-        height: Math.abs(height),
+        width: width,
+        height: height,
       });
     } else {
       // For rectangle and ellipse, handle negative dimensions
@@ -300,8 +319,8 @@ export function EditorCanvas({
       return;
     }
 
-    // Only add if the shape has some size
-    if (tempAnnotation.width > 5 || tempAnnotation.height > 5) {
+    // Only add if the shape has some size (use Math.abs for arrows/lines with signed dimensions)
+    if (Math.abs(tempAnnotation.width) > 5 || Math.abs(tempAnnotation.height) > 5) {
       onAnnotationAdd(tempAnnotation);
     }
 
@@ -314,10 +333,7 @@ export function EditorCanvas({
     return (
       <div className="flex-1 flex items-center justify-center bg-slate-900">
         <div className="text-center text-slate-500">
-          <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1"
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-          </svg>
+          <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" strokeWidth={1} />
           <p className="text-lg">No screenshot</p>
           <p className="text-sm mt-1">Capture a screenshot to start editing</p>
         </div>

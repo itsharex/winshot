@@ -1,25 +1,31 @@
 package screenshot
 
 import (
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 var (
-	user32Win  = windows.NewLazySystemDLL("user32.dll")
-	shcore     = windows.NewLazySystemDLL("shcore.dll")
-	dwmapi     = windows.NewLazySystemDLL("dwmapi.dll")
+	user32Win = windows.NewLazySystemDLL("user32.dll")
+	shcore    = windows.NewLazySystemDLL("shcore.dll")
+	dwmapi    = windows.NewLazySystemDLL("dwmapi.dll")
 
-	procGetWindowRectSS         = user32Win.NewProc("GetWindowRect")
-	procSetProcessDPIAware      = user32Win.NewProc("SetProcessDPIAware")
-	procDwmGetWindowAttribute   = dwmapi.NewProc("DwmGetWindowAttribute")
-	procSetProcessDpiAwareness  = shcore.NewProc("SetProcessDpiAwareness")
+	procGetWindowRectSS        = user32Win.NewProc("GetWindowRect")
+	procSetProcessDPIAware     = user32Win.NewProc("SetProcessDPIAware")
+	procDwmGetWindowAttribute  = dwmapi.NewProc("DwmGetWindowAttribute")
+	procSetProcessDpiAwareness = shcore.NewProc("SetProcessDpiAwareness")
+	procSetForegroundWindow    = user32Win.NewProc("SetForegroundWindow")
+	procBringWindowToTop       = user32Win.NewProc("BringWindowToTop")
+	procShowWindow             = user32Win.NewProc("ShowWindow")
+	procIsIconic               = user32Win.NewProc("IsIconic")
 )
 
 const (
-	DWMWA_EXTENDED_FRAME_BOUNDS = 9
+	DWMWA_EXTENDED_FRAME_BOUNDS   = 9
 	PROCESS_PER_MONITOR_DPI_AWARE = 2
+	SW_RESTORE                    = 9
 )
 
 type RECT struct {
@@ -37,9 +43,31 @@ func init() {
 	}
 }
 
+// bringWindowToForeground brings the specified window to the foreground
+// This ensures the window is visible and not covered by other windows before capture
+func bringWindowToForeground(hwnd uintptr) {
+	// Check if window is minimized and restore it
+	isMinimized, _, _ := procIsIconic.Call(hwnd)
+	if isMinimized != 0 {
+		procShowWindow.Call(hwnd, SW_RESTORE)
+	}
+
+	// Bring window to top of z-order
+	procBringWindowToTop.Call(hwnd)
+
+	// Set as foreground window (makes it active)
+	procSetForegroundWindow.Call(hwnd)
+
+	// Small delay to allow window to fully render in foreground
+	time.Sleep(100 * time.Millisecond)
+}
+
 // CaptureWindowByCoords captures a window by capturing the screen region at window coordinates
 // This approach is more reliable than direct GDI capture for hardware-accelerated windows
 func CaptureWindowByCoords(hwnd uintptr) (*CaptureResult, error) {
+	// Bring window to foreground before capture to ensure it's visible
+	bringWindowToForeground(hwnd)
+
 	var rect RECT
 
 	// Try DWM extended frame bounds first (more accurate for modern windows)

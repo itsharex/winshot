@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { OutputRatio } from '../types';
 import { GetBackgroundImages, SaveBackgroundImages } from '../../wailsjs/go/main/App';
+import { X, ImagePlus } from 'lucide-react';
 
 const MAX_BACKGROUND_IMAGES = 8;
 
@@ -137,57 +138,60 @@ export function SettingsPanel({
   };
 
   return (
-    <div className="w-64 bg-slate-800 border-l border-slate-700 p-4 overflow-y-auto">
-      <h2 className="text-sm font-semibold text-white mb-4">Settings</h2>
+    <div className="w-72 glass p-4 overflow-y-auto border-l-0">
+      <h2 className="text-sm font-bold text-gradient mb-5">Settings</h2>
 
       {/* Padding */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
-          Padding: {padding}px
-        </label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-sm text-slate-300 font-medium">Padding</label>
+          <span className="text-xs text-violet-400 font-semibold bg-violet-500/10 px-2 py-0.5 rounded-full">{padding}px</span>
+        </div>
         <input
           type="range"
           min="0"
           max={maxPadding}
           value={Math.min(padding, maxPadding)}
           onChange={(e) => onPaddingChange(Number(e.target.value))}
-          className="w-full accent-blue-500"
+          className="w-full"
         />
       </div>
 
       {/* Corner Radius */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
-          Corner Radius: {cornerRadius}px
-        </label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-sm text-slate-300 font-medium">Corner Radius</label>
+          <span className="text-xs text-cyan-400 font-semibold bg-cyan-500/10 px-2 py-0.5 rounded-full">{cornerRadius}px</span>
+        </div>
         <input
           type="range"
           min="0"
           max="200"
           value={cornerRadius}
           onChange={(e) => onCornerRadiusChange(Number(e.target.value))}
-          className="w-full accent-blue-500"
+          className="w-full"
         />
       </div>
 
       {/* Shadow/Blur */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
-          Shadow Blur: {shadowSize}px
-        </label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-sm text-slate-300 font-medium">Shadow Blur</label>
+          <span className="text-xs text-pink-400 font-semibold bg-pink-500/10 px-2 py-0.5 rounded-full">{shadowSize}px</span>
+        </div>
         <input
           type="range"
           min="0"
           max="100"
           value={shadowSize}
           onChange={(e) => onShadowSizeChange(Number(e.target.value))}
-          className="w-full accent-blue-500"
+          className="w-full"
         />
       </div>
 
       {/* Output Ratio */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
+        <label className="block text-sm text-slate-300 font-medium mb-3">
           Output Ratio
         </label>
         <div className="grid grid-cols-3 gap-1.5">
@@ -195,10 +199,10 @@ export function SettingsPanel({
             <button
               key={preset.value}
               onClick={() => onOutputRatioChange(preset.value)}
-              className={`px-2 py-1.5 text-xs rounded-md transition-all
+              className={`px-2 py-1.5 text-xs rounded-lg transition-all duration-200 font-medium
                 ${outputRatio === preset.value
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/30'
+                  : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/5'
                 }`}
             >
               {preset.label}
@@ -209,7 +213,7 @@ export function SettingsPanel({
 
       {/* Background Gradients */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
+        <label className="block text-sm text-slate-300 font-medium mb-3">
           Background
         </label>
         <div className="grid grid-cols-4 gap-2">
@@ -217,10 +221,10 @@ export function SettingsPanel({
             <button
               key={gradient.name}
               onClick={() => onBackgroundChange(gradient.value)}
-              className={`w-full aspect-square rounded-lg border-2 transition-all
+              className={`w-full aspect-square rounded-lg transition-all duration-200
                 ${backgroundColor === gradient.value
-                  ? 'border-blue-500 scale-110'
-                  : 'border-transparent hover:border-slate-500'
+                  ? 'ring-2 ring-violet-400 ring-offset-2 ring-offset-slate-900 scale-105'
+                  : 'hover:scale-105 hover:ring-1 hover:ring-white/30'
                 }`}
               style={{ background: gradient.value }}
               title={gradient.name}
@@ -231,21 +235,24 @@ export function SettingsPanel({
 
       {/* Custom Color */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
+        <label className="block text-sm text-slate-300 font-medium mb-3">
           Custom Color
         </label>
-        <input
-          type="color"
-          value={backgroundColor.startsWith('#') ? backgroundColor : '#1a1a2e'}
-          onChange={(e) => onBackgroundChange(e.target.value)}
-          className="w-full h-10 rounded-lg cursor-pointer bg-transparent"
-        />
+        <div className="relative">
+          <input
+            type="color"
+            value={backgroundColor.startsWith('#') ? backgroundColor : '#1a1a2e'}
+            onChange={(e) => onBackgroundChange(e.target.value)}
+            className="w-full h-10 rounded-lg cursor-pointer bg-white/5 border border-white/10 hover:border-white/20 transition-colors"
+          />
+        </div>
       </div>
 
       {/* Image Background */}
       <div className="mb-6">
-        <label className="block text-sm text-slate-400 mb-2">
-          Image Background ({uploadedImages.length}/{MAX_BACKGROUND_IMAGES})
+        <label className="block text-sm text-slate-300 font-medium mb-3">
+          Image Background
+          <span className="ml-2 text-xs text-slate-500">({uploadedImages.length}/{MAX_BACKGROUND_IMAGES})</span>
         </label>
         <input
           ref={fileInputRef}
@@ -264,10 +271,10 @@ export function SettingsPanel({
                 <div key={index} className="relative group">
                   <button
                     onClick={() => handleSelectImage(imageUrl)}
-                    className={`w-full aspect-square rounded-lg border-2 transition-all bg-cover bg-center
+                    className={`w-full aspect-square rounded-lg transition-all duration-200 bg-cover bg-center
                       ${isSelected
-                        ? 'border-blue-500 scale-110 z-10'
-                        : 'border-transparent hover:border-slate-500'
+                        ? 'ring-2 ring-violet-400 ring-offset-2 ring-offset-slate-900 scale-105 z-10'
+                        : 'hover:scale-105 hover:ring-1 hover:ring-white/30'
                       }`}
                     style={{ backgroundImage: `url(${imageUrl})` }}
                     title={`Image ${index + 1}`}
@@ -278,12 +285,10 @@ export function SettingsPanel({
                       e.stopPropagation();
                       handleRemoveImage(index);
                     }}
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg shadow-rose-500/50"
                     title="Remove image"
                   >
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X className="w-2.5 h-2.5 text-white" />
                   </button>
                 </div>
               );
@@ -295,11 +300,11 @@ export function SettingsPanel({
         {uploadedImages.length < MAX_BACKGROUND_IMAGES && (
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+            className="w-full px-4 py-2.5 rounded-xl transition-all duration-200
+                       bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 border-dashed
+                       text-slate-300 hover:text-white font-medium flex items-center justify-center gap-2"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+            <ImagePlus className="w-4 h-4" />
             Upload Image
           </button>
         )}

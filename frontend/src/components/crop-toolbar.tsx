@@ -27,18 +27,18 @@ export function CropToolbar({
   if (!isCropActive) return null;
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-slate-700 border-b border-slate-600">
-      <span className="text-sm text-slate-300 mr-2">Aspect Ratio:</span>
+    <div className="flex items-center gap-3 px-3 py-2 glass-light border-t border-white/5">
+      <span className="text-sm text-slate-300 font-medium">Aspect Ratio</span>
 
       <div className="flex gap-1">
         {ASPECT_RATIOS.map((ratio) => (
           <button
             key={ratio.id}
             onClick={() => onAspectRatioChange(ratio.id)}
-            className={`px-3 py-1 text-sm rounded transition-colors ${
+            className={`px-3 py-1 text-sm rounded-lg font-medium transition-all duration-200 ${
               aspectRatio === ratio.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/30'
+                : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/5'
             }`}
           >
             {ratio.label}
@@ -50,14 +50,19 @@ export function CropToolbar({
 
       <button
         onClick={onCancelCrop}
-        className="px-4 py-1 text-sm bg-slate-600 text-slate-300 rounded hover:bg-slate-500 transition-colors"
+        className="px-4 py-1.5 text-sm rounded-lg font-medium transition-all duration-200
+                   bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20
+                   text-slate-300 hover:text-white"
       >
         Cancel
       </button>
 
       <button
         onClick={onApplyCrop}
-        className="px-4 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors"
+        className="px-4 py-1.5 text-sm rounded-lg font-medium transition-all duration-200
+                   bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400
+                   text-white shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40
+                   hover:-translate-y-0.5 active:translate-y-0"
       >
         Apply Crop
       </button>

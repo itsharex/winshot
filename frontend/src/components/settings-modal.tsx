@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { HotkeyInput } from './hotkey-input';
 import { GetConfig, SaveConfig, SelectFolder } from '../../wailsjs/go/main/App';
 import { config } from '../../wailsjs/go/models';
+import { X } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -155,43 +156,44 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="glass-card rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-white">Settings</h2>
+        <div className="flex items-center justify-between p-5 border-b border-white/10">
+          <h2 className="text-lg font-bold text-gradient">Settings</h2>
           <button
             onClick={handleCancel}
-            className="p-1 text-slate-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all duration-200"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-700">
+        <div className="flex border-b border-white/10">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 relative ${
                 activeTab === tab.id
-                  ? 'text-blue-400 border-b-2 border-blue-400'
+                  ? 'text-white'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               {tab.label}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-500 to-purple-500" />
+              )}
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-5">
           {activeTab === 'hotkeys' && (
             <div>
-              <p className="text-sm text-slate-400 mb-4">
+              <p className="text-sm text-slate-400 mb-4 p-3 rounded-lg bg-white/5 border border-white/5">
                 Click on a field and press your desired key combination.
               </p>
               <HotkeyInput
@@ -229,7 +231,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {activeTab === 'startup' && (
             <div className="space-y-4">
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg bg-white/5 hover:bg-white/8 border border-white/5 transition-all duration-200">
                 <input
                   type="checkbox"
                   checked={localConfig.startup.launchOnStartup}
@@ -239,12 +241,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       startup: { ...prev.startup, launchOnStartup: e.target.checked },
                     }))
                   }
-                  className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
                 />
                 <span className="text-slate-200">Launch on Windows startup</span>
               </label>
 
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg bg-white/5 hover:bg-white/8 border border-white/5 transition-all duration-200">
                 <input
                   type="checkbox"
                   checked={localConfig.startup.minimizeToTray}
@@ -254,12 +255,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       startup: { ...prev.startup, minimizeToTray: e.target.checked },
                     }))
                   }
-                  className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
                 />
                 <span className="text-slate-200">Start minimized to tray</span>
               </label>
 
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg bg-white/5 hover:bg-white/8 border border-white/5 transition-all duration-200">
                 <input
                   type="checkbox"
                   checked={localConfig.startup.showNotification}
@@ -269,7 +269,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       startup: { ...prev.startup, showNotification: e.target.checked },
                     }))
                   }
-                  className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
                 />
                 <span className="text-slate-200">Show notification on capture</span>
               </label>
@@ -277,20 +276,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
 
           {activeTab === 'quicksave' && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm text-slate-400 mb-2">Save Folder</label>
+                <label className="block text-sm text-slate-300 font-medium mb-2">Save Folder</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={localConfig.quickSave.folder}
                     readOnly
-                    className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200"
+                    className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
                     placeholder="Default: Pictures/WinShot"
                   />
                   <button
                     onClick={handleSelectFolder}
-                    className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg"
+                    className="px-4 py-2.5 rounded-xl font-medium transition-all duration-200
+                               bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20
+                               text-slate-300 hover:text-white"
                   >
                     Browse
                   </button>
@@ -298,7 +299,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-2">Filename Pattern</label>
+                <label className="block text-sm text-slate-300 font-medium mb-2">Filename Pattern</label>
                 <select
                   value={localConfig.quickSave.pattern}
                   onChange={(e) =>
@@ -310,7 +311,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       },
                     }))
                   }
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200"
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-slate-200 focus:outline-none focus:border-violet-500/50"
                 >
                   <option value="timestamp">winshot_2024-12-01_15-30-45</option>
                   <option value="date">winshot_2024-12-01</option>
@@ -321,11 +322,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
 
           {activeTab === 'export' && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm text-slate-400 mb-2">Default Format</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <label className="block text-sm text-slate-300 font-medium mb-3">Default Format</label>
+                <div className="flex gap-3">
+                  <label className={`flex-1 flex items-center justify-center gap-2 cursor-pointer p-3 rounded-xl font-medium transition-all duration-200 ${
+                    localConfig.export.defaultFormat === 'png'
+                      ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/30'
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/5'
+                  }`}>
                     <input
                       type="radio"
                       name="format"
@@ -336,11 +341,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           export: { ...prev.export, defaultFormat: 'png' },
                         }))
                       }
-                      className="w-4 h-4 text-blue-500"
+                      className="sr-only"
                     />
-                    <span className="text-slate-200">PNG</span>
+                    <span>PNG</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className={`flex-1 flex items-center justify-center gap-2 cursor-pointer p-3 rounded-xl font-medium transition-all duration-200 ${
+                    localConfig.export.defaultFormat === 'jpeg'
+                      ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/30'
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/5'
+                  }`}>
                     <input
                       type="radio"
                       name="format"
@@ -351,17 +360,18 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           export: { ...prev.export, defaultFormat: 'jpeg' },
                         }))
                       }
-                      className="w-4 h-4 text-blue-500"
+                      className="sr-only"
                     />
-                    <span className="text-slate-200">JPEG</span>
+                    <span>JPEG</span>
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-2">
-                  JPEG Quality: {localConfig.export.jpegQuality}%
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm text-slate-300 font-medium">JPEG Quality</label>
+                  <span className="text-xs text-violet-400 font-semibold bg-violet-500/10 px-2 py-0.5 rounded-full">{localConfig.export.jpegQuality}%</span>
+                </div>
                 <input
                   type="range"
                   min="10"
@@ -373,12 +383,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       export: { ...prev.export, jpegQuality: Number(e.target.value) },
                     }))
                   }
-                  className="w-full accent-blue-500"
+                  className="w-full"
                   disabled={localConfig.export.defaultFormat !== 'jpeg'}
                 />
               </div>
 
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg bg-white/5 hover:bg-white/8 border border-white/5 transition-all duration-200">
                 <input
                   type="checkbox"
                   checked={localConfig.export.includeBackground}
@@ -388,7 +398,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       export: { ...prev.export, includeBackground: e.target.checked },
                     }))
                   }
-                  className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
                 />
                 <span className="text-slate-200">Include styled background</span>
               </label>
@@ -396,24 +405,29 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
 
           {error && (
-            <div className="mt-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+            <div className="mt-4 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm">
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-4 border-t border-slate-700">
+        <div className="flex justify-end gap-3 p-5 border-t border-white/10">
           <button
             onClick={handleCancel}
-            className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+            className="px-5 py-2.5 rounded-xl font-medium transition-all duration-200
+                       bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20
+                       text-slate-300 hover:text-white"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg transition-colors"
+            className="px-5 py-2.5 rounded-xl font-medium transition-all duration-200
+                       bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500
+                       text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40
+                       disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? 'Saving...' : 'Save'}
           </button>

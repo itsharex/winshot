@@ -1,0 +1,20 @@
+{
+  "name": "winshot",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Modern Screenshot Tool for Windows",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicholascostadev/winshot.git"
+  },
+  "scripts": {
+    "semantic-release": "semantic-release"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "semantic-release": "^24.2.0"
+  }
+}

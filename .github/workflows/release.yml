@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for releasable commits
+        id: check
+        run: |
+          $lastTag = git describe --tags --abbrev=0 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $commits = git log --oneline
+          } else {
+            $commits = git log "$lastTag..HEAD" --oneline
+          }
+          $hasReleasable = $commits | Where-Object { $_ -match "^[a-f0-9]+ (feat|fix|perf|refactor)(\(.+\))?:" }
+          if ($hasReleasable) {
+            echo "should_release=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "should_release=false" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
+      - name: Setup Go
+        if: steps.check.outputs.should_release == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Setup Node.js
+        if: steps.check.outputs.should_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Wails CLI
+        if: steps.check.outputs.should_release == 'true'
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build portable executable
+        if: steps.check.outputs.should_release == 'true'
+        run: wails build -clean -platform windows/amd64
+
+      - name: Build NSIS installer
+        if: steps.check.outputs.should_release == 'true'
+        run: wails build -clean -platform windows/amd64 -nsis
+
+      - name: Upload build artifacts
+        if: steps.check.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: winshot-windows
+          path: |
+            build/bin/winshot.exe
+            build/bin/winshot-amd64-installer.exe
+
+  release:
+    needs: build
+    if: needs.build.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: winshot-windows
+          path: build/bin
+
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

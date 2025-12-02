@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { X } from 'lucide-react';
 
 interface HotkeyInputProps {
   value: string;
@@ -127,17 +128,17 @@ export function HotkeyInput({ value, onChange, label, disabled = false }: Hotkey
 
   return (
     <div className="mb-4">
-      <label className="block text-sm text-slate-400 mb-2">{label}</label>
+      <label className="block text-sm text-slate-300 font-medium mb-2">{label}</label>
       <div className="flex gap-2">
         <button
           ref={inputRef}
           onClick={startRecording}
           onBlur={cancelRecording}
           disabled={disabled}
-          className={`flex-1 px-3 py-2 rounded-lg text-left transition-colors ${
+          className={`flex-1 px-4 py-2.5 rounded-xl text-left transition-all duration-200 ${
             isRecording
-              ? 'bg-blue-600 text-white ring-2 ring-blue-400'
-              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+              ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white ring-2 ring-violet-400/50'
+              : 'bg-white/5 text-slate-200 hover:bg-white/10 border border-white/10 hover:border-white/20'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           {isRecording
@@ -150,12 +151,12 @@ export function HotkeyInput({ value, onChange, label, disabled = false }: Hotkey
           <button
             onClick={clearHotkey}
             disabled={disabled}
-            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-400 rounded-lg"
+            className="px-3 py-2.5 rounded-xl transition-all duration-200
+                       bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30
+                       text-slate-400 hover:text-rose-400"
             title="Clear hotkey"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-4 h-4" />
           </button>
         )}
       </div>

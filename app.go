@@ -247,7 +247,15 @@ func (a *App) CaptureDisplay(displayIndex int) (*screenshot.CaptureResult, error
 
 // CaptureWindow captures a specific window by handle
 func (a *App) CaptureWindow(hwnd int) (*screenshot.CaptureResult, error) {
-	return screenshot.CaptureWindowByCoords(uintptr(hwnd))
+	result, err := screenshot.CaptureWindowByCoords(uintptr(hwnd))
+
+	// Bring WinShot back to front after capture
+	runtime.WindowShow(a.ctx)
+	runtime.WindowSetAlwaysOnTop(a.ctx, true)
+	time.Sleep(50 * time.Millisecond)
+	runtime.WindowSetAlwaysOnTop(a.ctx, false)
+
+	return result, err
 }
 
 // GetDisplayCount returns the number of active displays
