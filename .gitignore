@@ -5,6 +5,8 @@ pnpm-lock.yaml
 
 # Build outputs
 out/
+dist/
+!dist/index.html
 *.exe
 *.dll
 *.so

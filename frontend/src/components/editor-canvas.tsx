@@ -189,11 +189,28 @@ export function EditorCanvas({
     return `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
 
+  // Helper to check if a node is part of a Transformer
+  const isTransformerNode = useCallback((node: Konva.Node): boolean => {
+    let current: Konva.Node | null = node;
+    while (current) {
+      if (current.getClassName() === 'Transformer') {
+        return true;
+      }
+      current = current.getParent();
+    }
+    return false;
+  }, []);
+
   // Handle mouse down for drawing
   const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     if (activeTool === 'select') {
-      // Check if we clicked on empty space
-      const clickedOnEmpty = e.target === e.target.getStage() || e.target.getClassName() === 'Rect';
+      // Don't deselect if clicking on Transformer handles (resize/rotate anchors)
+      if (isTransformerNode(e.target)) {
+        return;
+      }
+      // Check if we clicked on empty space (Stage or background Rect only)
+      const clickedOnEmpty = e.target === e.target.getStage() ||
+        (e.target.getClassName() === 'Rect' && !e.target.getParent()?.getClassName());
       if (clickedOnEmpty) {
         onAnnotationSelect(null);
       }
@@ -254,7 +271,7 @@ export function EditorCanvas({
       points: annotationType === 'arrow' || annotationType === 'line' ? [0, 0, 0, 0] : undefined,
     };
     setTempAnnotation(newAnnotation);
-  }, [activeTool, scale, strokeColor, strokeWidth, generateId, onAnnotationSelect, onAnnotationAdd]);
+  }, [activeTool, scale, strokeColor, strokeWidth, generateId, onAnnotationSelect, onAnnotationAdd, isTransformerNode]);
 
   // Handle mouse move for drawing
   const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
