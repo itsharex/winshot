@@ -154,7 +154,7 @@ export function EditorCanvas({
 
   const activeStageRef = stageRef || internalStageRef;
 
-  // Update container size on resize
+  // Update container size on resize or when screenshot changes
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
@@ -165,10 +165,11 @@ export function EditorCanvas({
       }
     };
 
-    updateSize();
+    // Use RAF to ensure DOM has rendered
+    requestAnimationFrame(updateSize);
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
-  }, []);
+  }, [screenshot]);
 
   // Calculate scale to fit output in container
   useEffect(() => {
