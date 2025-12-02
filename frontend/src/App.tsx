@@ -297,21 +297,47 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedAnnotationId, handleDeleteSelected]);
 
+  // Helper to calculate inner dimensions preserving aspect ratio
+  const calculateInnerDimensions = useCallback((imgWidth: number, imgHeight: number, pad: number) => {
+    const availableWidth = imgWidth - pad * 2;
+    const availableHeight = imgHeight - pad * 2;
+    const imageAspectRatio = imgWidth / imgHeight;
+    const availableAspectRatio = availableWidth / availableHeight;
+
+    let innerWidth: number;
+    let innerHeight: number;
+
+    if (imageAspectRatio > availableAspectRatio) {
+      innerWidth = availableWidth;
+      innerHeight = availableWidth / imageAspectRatio;
+    } else {
+      innerHeight = availableHeight;
+      innerWidth = availableHeight * imageAspectRatio;
+    }
+
+    const actualPaddingX = (imgWidth - innerWidth) / 2;
+    const actualPaddingY = (imgHeight - innerHeight) / 2;
+
+    return { innerWidth, innerHeight, actualPaddingX, actualPaddingY };
+  }, []);
+
   // Initialize crop area when crop tool is selected
   const handleToolChange = useCallback((tool: EditorTool) => {
     setActiveTool(tool);
     if (tool === 'crop' && screenshot) {
-      // Initialize crop area to full image
+      // Calculate inner dimensions preserving aspect ratio
+      const { innerWidth, innerHeight, actualPaddingX, actualPaddingY } =
+        calculateInnerDimensions(screenshot.width, screenshot.height, padding);
       setCropArea({
-        x: padding,
-        y: padding,
-        width: screenshot.width,
-        height: screenshot.height,
+        x: actualPaddingX,
+        y: actualPaddingY,
+        width: innerWidth,
+        height: innerHeight,
       });
     } else if (tool !== 'crop') {
       setCropArea(null);
     }
-  }, [screenshot, padding]);
+  }, [screenshot, padding, calculateInnerDimensions]);
 
   // Crop handlers
   const handleCropChange = useCallback((area: CropArea) => {
@@ -321,11 +347,19 @@ function App() {
   const handleApplyCrop = useCallback(() => {
     if (!cropArea || !screenshot) return;
 
-    // Calculate crop coordinates relative to the image (not including padding)
-    const cropX = Math.max(0, cropArea.x - padding);
-    const cropY = Math.max(0, cropArea.y - padding);
-    const cropWidth = Math.min(cropArea.width, screenshot.width - cropX);
-    const cropHeight = Math.min(cropArea.height, screenshot.height - cropY);
+    // Calculate inner dimensions preserving aspect ratio
+    const { innerWidth, innerHeight, actualPaddingX, actualPaddingY } =
+      calculateInnerDimensions(screenshot.width, screenshot.height, padding);
+
+    // Scale factor to map back to original image coordinates
+    const scaleX = screenshot.width / innerWidth;
+    const scaleY = screenshot.height / innerHeight;
+
+    // Calculate crop coordinates relative to the original image
+    const cropX = Math.max(0, (cropArea.x - actualPaddingX) * scaleX);
+    const cropY = Math.max(0, (cropArea.y - actualPaddingY) * scaleY);
+    const cropWidth = Math.min(cropArea.width * scaleX, screenshot.width - cropX);
+    const cropHeight = Math.min(cropArea.height * scaleY, screenshot.height - cropY);
 
     // Create a canvas to crop the image
     const img = new Image();
@@ -355,7 +389,7 @@ function App() {
       setActiveTool('select');
     };
     img.src = `data:image/png;base64,${screenshot.data}`;
-  }, [cropArea, screenshot, padding]);
+  }, [cropArea, screenshot, padding, calculateInnerDimensions]);
 
   const handleCancelCrop = useCallback(() => {
     setCropArea(null);
@@ -551,6 +585,8 @@ function App() {
             cornerRadius={cornerRadius}
             shadowSize={shadowSize}
             backgroundColor={backgroundColor}
+            imageWidth={screenshot.width}
+            imageHeight={screenshot.height}
             onPaddingChange={setPadding}
             onCornerRadiusChange={setCornerRadius}
             onShadowSizeChange={setShadowSize}

@@ -61,6 +61,17 @@ func (a *App) startup(ctx context.Context) {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Save window size before closing
+	if a.config != nil {
+		width, height := runtime.WindowGetSize(ctx)
+		// Only save if size is reasonable (not minimized or fullscreen overlay)
+		if width >= 800 && height >= 600 {
+			a.config.Window.Width = width
+			a.config.Window.Height = height
+			a.config.Save()
+		}
+	}
+
 	// Cleanup resources
 	if a.hotkeyManager != nil {
 		a.hotkeyManager.Stop()
@@ -174,8 +185,14 @@ func (a *App) FinishRegionCapture() {
 	// Restore min size constraint
 	runtime.WindowSetMinSize(a.ctx, 800, 600)
 
-	// Restore window to default size
-	runtime.WindowSetSize(a.ctx, 1200, 800)
+	// Restore window to saved size from config
+	width := 1200
+	height := 800
+	if a.config != nil && a.config.Window.Width >= 800 && a.config.Window.Height >= 600 {
+		width = a.config.Window.Width
+		height = a.config.Window.Height
+	}
+	runtime.WindowSetSize(a.ctx, width, height)
 
 	// Center the window
 	runtime.WindowCenter(a.ctx)

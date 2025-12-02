@@ -7,18 +7,30 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"winshot/internal/config"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
+	// Load config to get saved window size
+	cfg, _ := config.Load()
+	width := cfg.Window.Width
+	height := cfg.Window.Height
+	if width < 800 {
+		width = 800
+	}
+	if height < 600 {
+		height = 600
+	}
+
 	app := NewApp()
 
 	err := wails.Run(&options.App{
 		Title:            "WinShot",
-		Width:            1200,
-		Height:           800,
+		Width:            width,
+		Height:           height,
 		MinWidth:         800,
 		MinHeight:        600,
 		Frameless:        true,

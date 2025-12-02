@@ -33,12 +33,19 @@ type ExportConfig struct {
 	IncludeBackground bool   `json:"includeBackground"`
 }
 
+// WindowConfig holds window size and position settings
+type WindowConfig struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
 // Config holds all application settings
 type Config struct {
 	Hotkeys   HotkeyConfig    `json:"hotkeys"`
 	Startup   StartupConfig   `json:"startup"`
 	QuickSave QuickSaveConfig `json:"quickSave"`
 	Export    ExportConfig    `json:"export"`
+	Window    WindowConfig    `json:"window"`
 }
 
 // Default returns default configuration
@@ -65,6 +72,10 @@ func Default() *Config {
 			DefaultFormat:     "png",
 			JpegQuality:       95,
 			IncludeBackground: true,
+		},
+		Window: WindowConfig{
+			Width:  1200,
+			Height: 800,
 		},
 	}
 }

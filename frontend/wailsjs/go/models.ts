@@ -1,5 +1,19 @@
 export namespace config {
 	
+	export class WindowConfig {
+	    width: number;
+	    height: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WindowConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
 	export class ExportConfig {
 	    defaultFormat: string;
 	    jpegQuality: number;
@@ -67,6 +81,7 @@ export namespace config {
 	    startup: StartupConfig;
 	    quickSave: QuickSaveConfig;
 	    export: ExportConfig;
+	    window: WindowConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -78,6 +93,7 @@ export namespace config {
 	        this.startup = this.convertValues(source["startup"], StartupConfig);
 	        this.quickSave = this.convertValues(source["quickSave"], QuickSaveConfig);
 	        this.export = this.convertValues(source["export"], ExportConfig);
+	        this.window = this.convertValues(source["window"], WindowConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -98,6 +114,7 @@ export namespace config {
 		    return a;
 		}
 	}
+	
 	
 	
 	

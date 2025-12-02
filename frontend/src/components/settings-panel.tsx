@@ -5,6 +5,8 @@ interface SettingsPanelProps {
   cornerRadius: number;
   shadowSize: number;
   backgroundColor: string;
+  imageWidth: number;
+  imageHeight: number;
   onPaddingChange: (value: number) => void;
   onCornerRadiusChange: (value: number) => void;
   onShadowSizeChange: (value: number) => void;
@@ -37,12 +39,17 @@ export function SettingsPanel({
   cornerRadius,
   shadowSize,
   backgroundColor,
+  imageWidth,
+  imageHeight,
   onPaddingChange,
   onCornerRadiusChange,
   onShadowSizeChange,
   onBackgroundChange,
 }: SettingsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Max padding is 1/3 of the smaller dimension
+  const maxPadding = Math.floor(Math.min(imageWidth, imageHeight) / 3);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,8 +75,8 @@ export function SettingsPanel({
         <input
           type="range"
           min="0"
-          max="100"
-          value={padding}
+          max={maxPadding}
+          value={Math.min(padding, maxPadding)}
           onChange={(e) => onPaddingChange(Number(e.target.value))}
           className="w-full accent-blue-500"
         />

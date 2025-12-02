@@ -7,7 +7,8 @@ interface CropOverlayProps {
   cropArea: CropArea;
   imageWidth: number;
   imageHeight: number;
-  padding: number;
+  paddingX: number;
+  paddingY: number;
   aspectRatio: AspectRatio;
   onCropChange: (area: CropArea) => void;
 }
@@ -25,7 +26,8 @@ export function CropOverlay({
   cropArea,
   imageWidth,
   imageHeight,
-  padding,
+  paddingX,
+  paddingY,
   aspectRatio,
   onCropChange,
 }: CropOverlayProps) {
@@ -54,25 +56,25 @@ export function CropOverlay({
     }
 
     // Constrain to image bounds (with padding offset)
-    x = Math.max(padding, Math.min(x, padding + imageWidth - width));
-    y = Math.max(padding, Math.min(y, padding + imageHeight - height));
+    x = Math.max(paddingX, Math.min(x, paddingX + imageWidth - width));
+    y = Math.max(paddingY, Math.min(y, paddingY + imageHeight - height));
 
     // Ensure we don't exceed bounds
-    if (x + width > padding + imageWidth) {
-      width = padding + imageWidth - x;
+    if (x + width > paddingX + imageWidth) {
+      width = paddingX + imageWidth - x;
       if (ratio !== null) {
         height = width / ratio;
       }
     }
-    if (y + height > padding + imageHeight) {
-      height = padding + imageHeight - y;
+    if (y + height > paddingY + imageHeight) {
+      height = paddingY + imageHeight - y;
       if (ratio !== null) {
         width = height * ratio;
       }
     }
 
     return { x, y, width, height };
-  }, [aspectRatio, imageWidth, imageHeight, padding]);
+  }, [aspectRatio, imageWidth, imageHeight, paddingX, paddingY]);
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const constrained = constrainCrop({
@@ -104,8 +106,8 @@ export function CropOverlay({
     onCropChange(constrained);
   };
 
-  const totalWidth = imageWidth + padding * 2;
-  const totalHeight = imageHeight + padding * 2;
+  const totalWidth = imageWidth + paddingX * 2;
+  const totalHeight = imageHeight + paddingY * 2;
 
   return (
     <Group>

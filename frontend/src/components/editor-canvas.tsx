@@ -28,7 +28,17 @@ interface EditorCanvasProps {
   onCropChange: (area: CropArea) => void;
 }
 
-function ScreenshotImage({ src, cornerRadius }: { src: string; cornerRadius: number }) {
+function ScreenshotImage({
+  src,
+  cornerRadius,
+  displayWidth,
+  displayHeight,
+}: {
+  src: string;
+  cornerRadius: number;
+  displayWidth: number;
+  displayHeight: number;
+}) {
   const [image] = useImage(src);
 
   if (!image) return null;
@@ -37,11 +47,11 @@ function ScreenshotImage({ src, cornerRadius }: { src: string; cornerRadius: num
     <Group
       clipFunc={(ctx) => {
         ctx.beginPath();
-        ctx.roundRect(0, 0, image.width, image.height, cornerRadius);
+        ctx.roundRect(0, 0, displayWidth, displayHeight, cornerRadius);
         ctx.closePath();
       }}
     >
-      <KonvaImage image={image} x={0} y={0} />
+      <KonvaImage image={image} x={0} y={0} width={displayWidth} height={displayHeight} />
     </Group>
   );
 }
@@ -119,13 +129,12 @@ export function EditorCanvas({
   // Calculate scale to fit screenshot in container
   useEffect(() => {
     if (screenshot) {
-      const totalWidth = screenshot.width + padding * 2;
-      const totalHeight = screenshot.height + padding * 2;
-      const scaleX = (containerSize.width - 80) / totalWidth;
-      const scaleY = (containerSize.height - 80) / totalHeight;
+      // Output size is same as screenshot dimensions (padding doesn't affect it)
+      const scaleX = (containerSize.width - 80) / screenshot.width;
+      const scaleY = (containerSize.height - 80) / screenshot.height;
       setScale(Math.min(scaleX, scaleY, 1));
     }
-  }, [screenshot, containerSize, padding]);
+  }, [screenshot, containerSize]);
 
   // Generate unique ID for annotations
   const generateId = useCallback(() => {
@@ -269,8 +278,34 @@ export function EditorCanvas({
   }
 
   const imageSrc = `data:image/png;base64,${screenshot.data}`;
-  const totalWidth = screenshot.width + padding * 2;
-  const totalHeight = screenshot.height + padding * 2;
+  // Output size stays constant (same as screenshot dimensions)
+  const totalWidth = screenshot.width;
+  const totalHeight = screenshot.height;
+
+  // Calculate image size while preserving aspect ratio
+  // The padding value is the MINIMUM padding (applied to the constraining dimension)
+  const availableWidth = totalWidth - padding * 2;
+  const availableHeight = totalHeight - padding * 2;
+  const imageAspectRatio = screenshot.width / screenshot.height;
+  const availableAspectRatio = availableWidth / availableHeight;
+
+  let innerWidth: number;
+  let innerHeight: number;
+
+  if (imageAspectRatio > availableAspectRatio) {
+    // Image is wider than available space - width is the constraint
+    innerWidth = availableWidth;
+    innerHeight = availableWidth / imageAspectRatio;
+  } else {
+    // Image is taller than available space - height is the constraint
+    innerHeight = availableHeight;
+    innerWidth = availableHeight * imageAspectRatio;
+  }
+
+  // Calculate actual padding (centered)
+  const actualPaddingX = (totalWidth - innerWidth) / 2;
+  const actualPaddingY = (totalHeight - innerHeight) / 2;
+
   const stageWidth = totalWidth * scale;
   const stageHeight = totalHeight * scale;
 
@@ -279,14 +314,13 @@ export function EditorCanvas({
   const isImageBackground = backgroundColor.startsWith('url(');
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-auto p-10">
+    <div ref={containerRef} className="flex-1 overflow-auto p-10 flex items-center justify-center">
       <div
-        className="mx-auto rounded-lg overflow-hidden"
+        className="rounded-lg overflow-hidden"
         style={{
           width: stageWidth,
           height: stageHeight,
           background: backgroundColor,
-          boxShadow: shadowSize > 0 ? `0 ${shadowSize}px ${shadowSize * 2}px rgba(0,0,0,0.3)` : 'none',
         }}
       >
         <Stage
@@ -331,23 +365,28 @@ export function EditorCanvas({
             )}
 
             {/* Screenshot with shadow */}
-            <Group x={padding} y={padding}>
-              {/* Shadow behind image */}
-              {shadowSize > 0 && (
-                <Rect
-                  x={shadowSize / 2}
-                  y={shadowSize / 2}
-                  width={screenshot.width}
-                  height={screenshot.height}
-                  fill="rgba(0,0,0,0.3)"
-                  cornerRadius={cornerRadius}
-                  filters={[Konva.Filters.Blur]}
-                  blurRadius={shadowSize}
-                />
-              )}
+            <Group x={actualPaddingX} y={actualPaddingY}>
+              {/* Shadow rect - same size as image, with blur shadow */}
+              <Rect
+                x={0}
+                y={0}
+                width={innerWidth}
+                height={innerHeight}
+                fill="#000"
+                cornerRadius={cornerRadius}
+                shadowColor="rgba(0,0,0,0.5)"
+                shadowBlur={shadowSize}
+                shadowOffset={{ x: 0, y: shadowSize / 4 }}
+                shadowEnabled={shadowSize > 0}
+              />
 
-              {/* Screenshot image */}
-              <ScreenshotImage src={imageSrc} cornerRadius={cornerRadius} />
+              {/* Screenshot image (scaled down to fit within padding) */}
+              <ScreenshotImage
+                src={imageSrc}
+                cornerRadius={cornerRadius}
+                displayWidth={innerWidth}
+                displayHeight={innerHeight}
+              />
             </Group>
 
             {/* Annotations */}
@@ -363,9 +402,10 @@ export function EditorCanvas({
             {activeTool === 'crop' && cropArea && (
               <CropOverlay
                 cropArea={cropArea}
-                imageWidth={screenshot.width}
-                imageHeight={screenshot.height}
-                padding={padding}
+                imageWidth={innerWidth}
+                imageHeight={innerHeight}
+                paddingX={actualPaddingX}
+                paddingY={actualPaddingY}
                 aspectRatio={aspectRatio}
                 onCropChange={onCropChange}
               />
