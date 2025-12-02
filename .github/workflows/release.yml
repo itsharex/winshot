@@ -54,11 +54,13 @@ jobs:
         if: steps.check.outputs.should_release == 'true'
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Install frontend dependencies
+      - name: Clean and install frontend dependencies
         if: steps.check.outputs.should_release == 'true'
         run: |
           cd frontend
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
           npm install
+        shell: pwsh
 
       - name: Build portable executable
         if: steps.check.outputs.should_release == 'true'
@@ -66,7 +68,7 @@ jobs:
 
       - name: Build NSIS installer
         if: steps.check.outputs.should_release == 'true'
-        run: wails build -clean -platform windows/amd64 -nsis
+        run: wails build -platform windows/amd64 -nsis
 
       - name: Upload build artifacts
         if: steps.check.outputs.should_release == 'true'
