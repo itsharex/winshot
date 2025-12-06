@@ -22,6 +22,7 @@ import {
   PrepareRegionCapture,
   FinishRegionCapture,
   UpdateWindowSize,
+  GetConfig,
 } from '../wailsjs/go/main/App';
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
@@ -61,6 +62,50 @@ function loadEditorSettings(): EditorSettings {
 // Save settings to localStorage
 function saveEditorSettings(settings: EditorSettings): void {
   localStorage.setItem(EDITOR_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+// Helper to copy screenshot to clipboard with format from config
+async function copyScreenshotToClipboard(screenshotData: string, format: 'png' | 'jpeg', jpegQuality: number): Promise<boolean> {
+  try {
+    // Create an image from the base64 data
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = `data:image/png;base64,${screenshotData}`;
+    });
+
+    // Create canvas and draw image
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.drawImage(img, 0, 0);
+
+    // Convert to blob with appropriate format
+    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const quality = format === 'jpeg' ? jpegQuality / 100 : undefined;
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, mimeType, quality);
+    });
+
+    if (!blob) return false;
+
+    // Copy to clipboard - always use PNG for clipboard compatibility
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': format === 'png' ? blob : await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b!), 'image/png');
+        }),
+      }),
+    ]);
+    return true;
+  } catch (error) {
+    console.error('Failed to copy screenshot to clipboard:', error);
+    return false;
+  }
 }
 
 function App() {
@@ -161,7 +206,30 @@ function App() {
       }
 
       setScreenshot(result);
+      // Reset annotations and crop state for new capture
+      setAnnotations([]);
+      setSelectedAnnotationId(null);
+      setCropArea(null);
+      setActiveTool('select');
       setStatusMessage(undefined);
+
+      // Auto-copy to clipboard if enabled (delay to ensure window is visible)
+      setTimeout(async () => {
+        try {
+          const cfg = await GetConfig();
+          if (cfg.export?.autoCopyToClipboard) {
+            const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
+            const quality = cfg.export?.jpegQuality || 95;
+            const success = await copyScreenshotToClipboard(result.data, format, quality);
+            if (success) {
+              setStatusMessage('Copied to clipboard!');
+              setTimeout(() => setStatusMessage(undefined), 2000);
+            }
+          }
+        } catch (err) {
+          console.error('Auto-copy failed:', err);
+        }
+      }, 100);
     } catch (error) {
       console.error('Capture failed:', error);
       setStatusMessage('Capture failed');
@@ -179,7 +247,30 @@ function App() {
     try {
       const result = await CaptureWindow(window.handle) as CaptureResult;
       setScreenshot(result);
+      // Reset annotations and crop state for new capture
+      setAnnotations([]);
+      setSelectedAnnotationId(null);
+      setCropArea(null);
+      setActiveTool('select');
       setStatusMessage(undefined);
+
+      // Auto-copy to clipboard if enabled (delay to ensure window is visible)
+      setTimeout(async () => {
+        try {
+          const cfg = await GetConfig();
+          if (cfg.export?.autoCopyToClipboard) {
+            const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
+            const quality = cfg.export?.jpegQuality || 95;
+            const success = await copyScreenshotToClipboard(result.data, format, quality);
+            if (success) {
+              setStatusMessage('Copied to clipboard!');
+              setTimeout(() => setStatusMessage(undefined), 2000);
+            }
+          }
+        } catch (err) {
+          console.error('Auto-copy failed:', err);
+        }
+      }, 100);
     } catch (error) {
       console.error('Window capture failed:', error);
       setStatusMessage('Capture failed');
@@ -202,7 +293,7 @@ function App() {
 
       // Create an image from the fullscreen screenshot
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         // Apply DPI scale ratio to get actual pixel coordinates in the screenshot
         const scale = regionScaleRatio;
         const scaledX = Math.round(x * scale);
@@ -230,6 +321,11 @@ function App() {
           height: scaledHeight,
           data: croppedData,
         });
+        // Reset annotations and crop state for new capture
+        setAnnotations([]);
+        setSelectedAnnotationId(null);
+        setCropArea(null);
+        setActiveTool('select');
         setStatusMessage(undefined);
         setIsCapturing(false);
 
@@ -237,6 +333,24 @@ function App() {
         FinishRegionCapture();
         setRegionScreenshot(undefined);
         setRegionScaleRatio(1);
+
+        // Auto-copy to clipboard if enabled (delay to ensure window is visible)
+        setTimeout(async () => {
+          try {
+            const cfg = await GetConfig();
+            if (cfg.export?.autoCopyToClipboard) {
+              const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
+              const quality = cfg.export?.jpegQuality || 95;
+              const success = await copyScreenshotToClipboard(croppedData, format, quality);
+              if (success) {
+                setStatusMessage('Copied to clipboard!');
+                setTimeout(() => setStatusMessage(undefined), 2000);
+              }
+            }
+          } catch (err) {
+            console.error('Auto-copy failed:', err);
+          }
+        }, 100);
       };
       img.onerror = () => {
         setStatusMessage('Failed to load screenshot');
@@ -644,7 +758,7 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-transparent">
-      <TitleBar />
+      <TitleBar onMinimize={handleMinimizeToTray} />
       <CaptureToolbar
         onCapture={handleCapture}
         isCapturing={isCapturing}

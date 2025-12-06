@@ -123,6 +123,17 @@ func (a *App) MinimizeToTray() {
 	runtime.WindowHide(a.ctx)
 }
 
+// OnBeforeClose is called when the window close button is clicked
+// Returns true to prevent the default close behavior (if close-to-tray is enabled)
+func (a *App) OnBeforeClose(ctx context.Context) bool {
+	if a.config != nil && a.config.Startup.CloseToTray {
+		// Hide window instead of closing
+		runtime.WindowHide(ctx)
+		return true // Prevent default close
+	}
+	return false // Allow normal close
+}
+
 // RegionCaptureData holds the fullscreen screenshot and display info for region selection
 type RegionCaptureData struct {
 	Screenshot   *screenshot.CaptureResult `json:"screenshot"`

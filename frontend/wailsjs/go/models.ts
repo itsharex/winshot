@@ -18,6 +18,7 @@ export namespace config {
 	    defaultFormat: string;
 	    jpegQuality: number;
 	    includeBackground: boolean;
+	    autoCopyToClipboard: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ExportConfig(source);
@@ -28,6 +29,7 @@ export namespace config {
 	        this.defaultFormat = source["defaultFormat"];
 	        this.jpegQuality = source["jpegQuality"];
 	        this.includeBackground = source["includeBackground"];
+	        this.autoCopyToClipboard = source["autoCopyToClipboard"];
 	    }
 	}
 	export class QuickSaveConfig {
@@ -48,6 +50,7 @@ export namespace config {
 	    launchOnStartup: boolean;
 	    minimizeToTray: boolean;
 	    showNotification: boolean;
+	    closeToTray: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new StartupConfig(source);
@@ -58,6 +61,7 @@ export namespace config {
 	        this.launchOnStartup = source["launchOnStartup"];
 	        this.minimizeToTray = source["minimizeToTray"];
 	        this.showNotification = source["showNotification"];
+	        this.closeToTray = source["closeToTray"];
 	    }
 	}
 	export class HotkeyConfig {

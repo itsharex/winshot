@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Rect, Transformer, Group } from 'react-konva';
+import { Rect, Transformer, Group, Line } from 'react-konva';
 import Konva from 'konva';
 import { CropArea, AspectRatio } from '../types';
 
@@ -12,6 +12,9 @@ interface CropOverlayProps {
   aspectRatio: AspectRatio;
   onCropChange: (area: CropArea) => void;
 }
+
+// Track if Ctrl key is held for center-based resize
+let isCtrlHeld = false;
 
 const ASPECT_RATIO_VALUES: Record<AspectRatio, number | null> = {
   'free': null,
@@ -33,12 +36,36 @@ export function CropOverlay({
 }: CropOverlayProps) {
   const cropRef = useRef<Konva.Rect>(null);
   const trRef = useRef<Konva.Transformer>(null);
+  const [ctrlPressed, setCtrlPressed] = useState(false);
+  const transformStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
     if (trRef.current && cropRef.current) {
       trRef.current.nodes([cropRef.current]);
       trRef.current.getLayer()?.batchDraw();
     }
+  }, []);
+
+  // Track Ctrl key for center-based resize
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        isCtrlHeld = true;
+        setCtrlPressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        isCtrlHeld = false;
+        setCtrlPressed(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
 
   const constrainCrop = useCallback((newArea: CropArea): CropArea => {
@@ -86,6 +113,58 @@ export function CropOverlay({
     onCropChange(constrained);
   };
 
+  // Store original position when transform starts
+  const handleTransformStart = () => {
+    transformStartRef.current = {
+      x: cropArea.x,
+      y: cropArea.y,
+      width: cropArea.width,
+      height: cropArea.height,
+    };
+  };
+
+  const handleTransform = () => {
+    const node = cropRef.current;
+    if (!node || !transformStartRef.current) return;
+
+    // If Ctrl is held, perform center-based resize
+    if (isCtrlHeld) {
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+
+      // Calculate new dimensions
+      const newWidth = Math.max(20, transformStartRef.current.width * scaleX);
+      const newHeight = Math.max(20, transformStartRef.current.height * scaleY);
+
+      // Calculate the center of the original crop area
+      const centerX = transformStartRef.current.x + transformStartRef.current.width / 2;
+      const centerY = transformStartRef.current.y + transformStartRef.current.height / 2;
+
+      // Calculate new position to keep center fixed
+      const newX = centerX - newWidth / 2;
+      const newY = centerY - newHeight / 2;
+
+      // Apply constraints and update
+      const constrained = constrainCrop({
+        x: newX,
+        y: newY,
+        width: newWidth,
+        height: newHeight,
+      });
+
+      // Update node position to reflect center-based resize
+      node.x(constrained.x);
+      node.y(constrained.y);
+      node.width(constrained.width);
+      node.height(constrained.height);
+      node.scaleX(1);
+      node.scaleY(1);
+
+      // Notify parent
+      onCropChange(constrained);
+    }
+  };
+
   const handleTransformEnd = () => {
     const node = cropRef.current;
     if (!node) return;
@@ -96,14 +175,33 @@ export function CropOverlay({
     node.scaleX(1);
     node.scaleY(1);
 
-    const constrained = constrainCrop({
-      x: node.x(),
-      y: node.y(),
-      width: Math.max(20, node.width() * scaleX),
-      height: Math.max(20, node.height() * scaleY),
-    });
+    let newArea: CropArea;
 
+    // If Ctrl was held during transform, use center-based calculation
+    if (isCtrlHeld && transformStartRef.current) {
+      const newWidth = Math.max(20, transformStartRef.current.width * scaleX);
+      const newHeight = Math.max(20, transformStartRef.current.height * scaleY);
+      const centerX = transformStartRef.current.x + transformStartRef.current.width / 2;
+      const centerY = transformStartRef.current.y + transformStartRef.current.height / 2;
+
+      newArea = {
+        x: centerX - newWidth / 2,
+        y: centerY - newHeight / 2,
+        width: newWidth,
+        height: newHeight,
+      };
+    } else {
+      newArea = {
+        x: node.x(),
+        y: node.y(),
+        width: Math.max(20, node.width() * scaleX),
+        height: Math.max(20, node.height() * scaleY),
+      };
+    }
+
+    const constrained = constrainCrop(newArea);
     onCropChange(constrained);
+    transformStartRef.current = null;
   };
 
   const totalWidth = imageWidth + paddingX * 2;
@@ -156,13 +254,39 @@ export function CropOverlay({
         y={cropArea.y}
         width={cropArea.width}
         height={cropArea.height}
-        stroke="#3b82f6"
+        stroke={ctrlPressed ? "#10b981" : "#3b82f6"}
         strokeWidth={2}
         dash={[5, 5]}
         draggable
         onDragEnd={handleDragEnd}
+        onTransformStart={handleTransformStart}
+        onTransform={handleTransform}
         onTransformEnd={handleTransformEnd}
       />
+
+      {/* Center crosshair indicator when Ctrl is held */}
+      {ctrlPressed && (
+        <>
+          <Line
+            points={[
+              cropArea.x + cropArea.width / 2 - 10, cropArea.y + cropArea.height / 2,
+              cropArea.x + cropArea.width / 2 + 10, cropArea.y + cropArea.height / 2
+            ]}
+            stroke="#10b981"
+            strokeWidth={2}
+            listening={false}
+          />
+          <Line
+            points={[
+              cropArea.x + cropArea.width / 2, cropArea.y + cropArea.height / 2 - 10,
+              cropArea.x + cropArea.width / 2, cropArea.y + cropArea.height / 2 + 10
+            ]}
+            stroke="#10b981"
+            strokeWidth={2}
+            listening={false}
+          />
+        </>
+      )}
 
       {/* Grid lines (rule of thirds) */}
       <Rect
