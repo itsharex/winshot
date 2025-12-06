@@ -25,7 +25,7 @@ import {
   GetConfig,
   OpenImage,
 } from '../wailsjs/go/main/App';
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
+import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
 
 // Storage key for persistent editor settings
 const EDITOR_SETTINGS_KEY = 'winshot-editor-settings';
@@ -152,17 +152,25 @@ function App() {
   }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio]);
 
   // Track window size for persistence on close
+  // Use Wails WindowGetSize API for accurate DPI-aware dimensions
   useEffect(() => {
     let resizeTimeout: ReturnType<typeof setTimeout>;
+    const updateSize = async () => {
+      try {
+        const size = await WindowGetSize();
+        UpdateWindowSize(size.w, size.h);
+      } catch {
+        // Fallback to window dimensions if Wails API fails
+        UpdateWindowSize(window.outerWidth, window.outerHeight);
+      }
+    };
     const handleResize = () => {
       clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        UpdateWindowSize(window.outerWidth, window.outerHeight);
-      }, 200);
+      resizeTimeout = setTimeout(updateSize, 200);
     };
     window.addEventListener('resize', handleResize);
     // Initial size report
-    UpdateWindowSize(window.outerWidth, window.outerHeight);
+    updateSize();
     return () => {
       clearTimeout(resizeTimeout);
       window.removeEventListener('resize', handleResize);

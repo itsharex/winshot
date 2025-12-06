@@ -27,10 +27,13 @@ import (
 type App struct {
 	ctx           context.Context
 	hotkeyManager *hotkeys.HotkeyManager
-	trayIcon      *tray.TrayIcon
-	config        *config.Config
-	lastWidth     int
-	lastHeight    int
+	trayIcon         *tray.TrayIcon
+	config           *config.Config
+	lastWidth        int
+	lastHeight       int
+	preCaptureWidth  int // Window size before capture (protected from resize events)
+	preCaptureHeight int
+	isCapturing      bool // Flag to prevent resize events during capture
 }
 
 // NewApp creates a new App application struct
@@ -119,6 +122,10 @@ func (a *App) onTrayMenu(menuID int) {
 
 // UpdateWindowSize tracks the current window size for persistence
 func (a *App) UpdateWindowSize(width, height int) {
+	// Skip updates during capture to preserve pre-capture size
+	if a.isCapturing {
+		return
+	}
 	if width >= 800 && height >= 600 {
 		a.lastWidth = width
 		a.lastHeight = height
@@ -156,6 +163,24 @@ type RegionCaptureData struct {
 
 // PrepareRegionCapture prepares for region selection by capturing the active monitor and setting up overlay
 func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
+	// Set capturing flag to prevent resize events from overwriting saved size
+	a.isCapturing = true
+
+	// Save current window size before hiding (protected from resize events)
+	width, height := runtime.WindowGetSize(a.ctx)
+	if width >= 800 && height >= 600 {
+		a.preCaptureWidth = width
+		a.preCaptureHeight = height
+	} else if a.lastWidth >= 800 && a.lastHeight >= 600 {
+		// Fallback to last tracked size
+		a.preCaptureWidth = a.lastWidth
+		a.preCaptureHeight = a.lastHeight
+	} else {
+		// Default fallback
+		a.preCaptureWidth = 1200
+		a.preCaptureHeight = 800
+	}
+
 	// Hide the window first so it's not in the screenshot
 	runtime.WindowHide(a.ctx)
 
@@ -261,14 +286,18 @@ func (a *App) FinishRegionCapture() {
 	// Restore min size constraint
 	runtime.WindowSetMinSize(a.ctx, 800, 600)
 
-	// Restore window to saved size from config
-	width := 1200
-	height := 800
-	if a.config != nil && a.config.Window.Width >= 800 && a.config.Window.Height >= 600 {
-		width = a.config.Window.Width
-		height = a.config.Window.Height
+	// Restore window to the size it was before capture (protected value)
+	width := a.preCaptureWidth
+	height := a.preCaptureHeight
+	if width < 800 || height < 600 {
+		// Fallback to defaults
+		width = 1200
+		height = 800
 	}
 	runtime.WindowSetSize(a.ctx, width, height)
+
+	// Clear capturing flag to allow resize tracking again
+	a.isCapturing = false
 
 	// Center the window
 	runtime.WindowCenter(a.ctx)
