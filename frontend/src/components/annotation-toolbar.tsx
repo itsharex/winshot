@@ -6,7 +6,6 @@ import {
   MoveRight,
   Minus,
   Type,
-  Crop,
   Trash2,
   Bold,
   Italic,
@@ -136,12 +135,6 @@ export function AnnotationToolbar({
       label: 'Spotlight',
       shortcut: 'S',
       icon: <Lightbulb className="w-5 h-5" />,
-    },
-    {
-      id: 'crop',
-      label: 'Crop',
-      shortcut: 'C',
-      icon: <Crop className="w-5 h-5" />,
     },
   ];
 

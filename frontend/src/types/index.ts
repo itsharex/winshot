@@ -55,16 +55,8 @@ export interface Annotation {
   dimOpacity?: number; // Opacity of the dimmed area (0-1, default 0.7)
 }
 
-export type EditorTool = 'select' | 'crop' | AnnotationType;
+export type EditorTool = 'select' | AnnotationType;
 
-export interface CropArea {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export type AspectRatio = 'free' | '16:9' | '4:3' | '1:1' | '9:16' | '3:4';
 
 // Output canvas ratio - determines the final export dimensions
 export type OutputRatio = 'auto' | '1:1' | '4:3' | '3:2' | '16:9' | '5:3' | '9:16' | '3:4' | '2:3';

@@ -2,9 +2,8 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Group } from 'react-konva';
 import useImage from 'use-image';
 import Konva from 'konva';
-import { CaptureResult, Annotation, AnnotationType, EditorTool, CropArea, AspectRatio, OutputRatio } from '../types';
+import { CaptureResult, Annotation, AnnotationType, EditorTool, OutputRatio } from '../types';
 import { AnnotationShapes } from './annotation-shapes';
-import { CropOverlay } from './crop-overlay';
 import { SpotlightOverlay } from './spotlight-overlay';
 import { ImageIcon } from 'lucide-react';
 
@@ -28,10 +27,6 @@ interface EditorCanvasProps {
   onAnnotationSelect: (id: string | null) => void;
   onAnnotationUpdate: (id: string, updates: Partial<Annotation>) => void;
   onToolChange?: (tool: EditorTool) => void;
-  // Crop props
-  cropArea: CropArea | null;
-  aspectRatio: AspectRatio;
-  onCropChange: (area: CropArea) => void;
 }
 
 // Helper to parse ratio string into numeric ratio
@@ -173,9 +168,6 @@ export function EditorCanvas({
   onAnnotationSelect,
   onAnnotationUpdate,
   onToolChange,
-  cropArea,
-  aspectRatio,
-  onCropChange,
 }: EditorCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const internalStageRef = useRef<Konva.Stage>(null);
@@ -413,11 +405,6 @@ export function EditorCanvas({
 
       // Clicked on Stage, Layer, Group (background), or other non-shape element - deselect
       onAnnotationSelect(null);
-      return;
-    }
-
-    // Crop tool is handled separately by CropOverlay
-    if (activeTool === 'crop') {
       return;
     }
 
@@ -730,19 +717,6 @@ export function EditorCanvas({
               totalWidth={totalWidth}
               totalHeight={totalHeight}
             />
-
-            {/* Crop overlay */}
-            {activeTool === 'crop' && cropArea && (
-              <CropOverlay
-                cropArea={cropArea}
-                imageWidth={innerWidth}
-                imageHeight={innerHeight}
-                paddingX={actualPaddingX}
-                paddingY={actualPaddingY}
-                aspectRatio={aspectRatio}
-                onCropChange={onCropChange}
-              />
-            )}
           </Layer>
         </Stage>
         </div>

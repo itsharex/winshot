@@ -9,9 +9,8 @@ import { SettingsPanel } from './components/settings-panel';
 import { SettingsModal } from './components/settings-modal';
 import { StatusBar } from './components/status-bar';
 import { AnnotationToolbar } from './components/annotation-toolbar';
-import { CropToolbar } from './components/crop-toolbar';
 import { ExportToolbar } from './components/export-toolbar';
-import { CaptureResult, CaptureMode, WindowInfo, Annotation, EditorTool, CropArea, AspectRatio, OutputRatio } from './types';
+import { CaptureResult, CaptureMode, WindowInfo, Annotation, EditorTool, OutputRatio } from './types';
 import {
   CaptureFullscreen,
   CaptureWindow,
@@ -136,9 +135,6 @@ function App() {
   const [fontSize, setFontSize] = useState(48);
   const [fontStyle, setFontStyle] = useState<'normal' | 'bold' | 'italic' | 'bold italic'>('normal');
 
-  // Crop state
-  const [cropArea, setCropArea] = useState<CropArea | null>(null);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('free');
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
@@ -215,10 +211,9 @@ function App() {
       }
 
       setScreenshot(result);
-      // Reset annotations and crop state for new capture
+      // Reset annotations for new capture
       setAnnotations([]);
       setSelectedAnnotationId(null);
-      setCropArea(null);
       setActiveTool('select');
       setStatusMessage(undefined);
 
@@ -256,10 +251,9 @@ function App() {
     try {
       const result = await CaptureWindow(window.handle) as CaptureResult;
       setScreenshot(result);
-      // Reset annotations and crop state for new capture
+      // Reset annotations for new capture
       setAnnotations([]);
       setSelectedAnnotationId(null);
-      setCropArea(null);
       setActiveTool('select');
       setStatusMessage(undefined);
 
@@ -330,10 +324,9 @@ function App() {
           height: scaledHeight,
           data: croppedData,
         });
-        // Reset annotations and crop state for new capture
+        // Reset annotations for new capture
         setAnnotations([]);
         setSelectedAnnotationId(null);
-        setCropArea(null);
         setActiveTool('select');
         setStatusMessage(undefined);
         setIsCapturing(false);
@@ -400,10 +393,9 @@ function App() {
       }
 
       setScreenshot(result as CaptureResult);
-      // Reset annotations and crop state for imported image
+      // Reset annotations for imported image
       setAnnotations([]);
       setSelectedAnnotationId(null);
-      setCropArea(null);
       setActiveTool('select');
       setStatusMessage('Image imported successfully');
       setTimeout(() => setStatusMessage(undefined), 2000);
@@ -526,47 +518,10 @@ function App() {
     }
   }, [selectedAnnotationId]);
 
-  // Helper to calculate inner dimensions preserving aspect ratio
-  const calculateInnerDimensions = useCallback((imgWidth: number, imgHeight: number, pad: number) => {
-    const availableWidth = imgWidth - pad * 2;
-    const availableHeight = imgHeight - pad * 2;
-    const imageAspectRatio = imgWidth / imgHeight;
-    const availableAspectRatio = availableWidth / availableHeight;
-
-    let innerWidth: number;
-    let innerHeight: number;
-
-    if (imageAspectRatio > availableAspectRatio) {
-      innerWidth = availableWidth;
-      innerHeight = availableWidth / imageAspectRatio;
-    } else {
-      innerHeight = availableHeight;
-      innerWidth = availableHeight * imageAspectRatio;
-    }
-
-    const actualPaddingX = (imgWidth - innerWidth) / 2;
-    const actualPaddingY = (imgHeight - innerHeight) / 2;
-
-    return { innerWidth, innerHeight, actualPaddingX, actualPaddingY };
-  }, []);
-
-  // Initialize crop area when crop tool is selected
+  // Tool change handler
   const handleToolChange = useCallback((tool: EditorTool) => {
     setActiveTool(tool);
-    if (tool === 'crop' && screenshot) {
-      // Calculate inner dimensions preserving aspect ratio
-      const { innerWidth, innerHeight, actualPaddingX, actualPaddingY } =
-        calculateInnerDimensions(screenshot.width, screenshot.height, padding);
-      setCropArea({
-        x: actualPaddingX,
-        y: actualPaddingY,
-        width: innerWidth,
-        height: innerHeight,
-      });
-    } else if (tool !== 'crop') {
-      setCropArea(null);
-    }
-  }, [screenshot, padding, calculateInnerDimensions]);
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -583,7 +538,6 @@ function App() {
       } else if (e.key === 'Escape') {
         setSelectedAnnotationId(null);
         setActiveTool('select');
-        setCropArea(null);
       } else if (!e.ctrlKey && !e.altKey && !e.metaKey) {
         // Tool shortcuts (single keys without modifiers)
         const key = e.key.toLowerCase();
@@ -606,9 +560,6 @@ function App() {
           case 't':
             handleToolChange('text');
             break;
-          case 'c':
-            handleToolChange('crop');
-            break;
         }
       }
     };
@@ -616,63 +567,6 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedAnnotationId, handleDeleteSelected, handleToolChange]);
-
-  // Crop handlers
-  const handleCropChange = useCallback((area: CropArea) => {
-    setCropArea(area);
-  }, []);
-
-  const handleApplyCrop = useCallback(() => {
-    if (!cropArea || !screenshot) return;
-
-    // Calculate inner dimensions preserving aspect ratio
-    const { innerWidth, innerHeight, actualPaddingX, actualPaddingY } =
-      calculateInnerDimensions(screenshot.width, screenshot.height, padding);
-
-    // Scale factor to map back to original image coordinates
-    const scaleX = screenshot.width / innerWidth;
-    const scaleY = screenshot.height / innerHeight;
-
-    // Calculate crop coordinates relative to the original image
-    const cropX = Math.max(0, (cropArea.x - actualPaddingX) * scaleX);
-    const cropY = Math.max(0, (cropArea.y - actualPaddingY) * scaleY);
-    const cropWidth = Math.min(cropArea.width * scaleX, screenshot.width - cropX);
-    const cropHeight = Math.min(cropArea.height * scaleY, screenshot.height - cropY);
-
-    // Create a canvas to crop the image
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = cropWidth;
-      canvas.height = cropHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      ctx.drawImage(
-        img,
-        cropX, cropY, cropWidth, cropHeight,
-        0, 0, cropWidth, cropHeight
-      );
-
-      // Get the cropped image as base64
-      const croppedData = canvas.toDataURL('image/png').split(',')[1];
-      setScreenshot({
-        width: cropWidth,
-        height: cropHeight,
-        data: croppedData,
-      });
-
-      // Reset crop state
-      setCropArea(null);
-      setActiveTool('select');
-    };
-    img.src = `data:image/png;base64,${screenshot.data}`;
-  }, [cropArea, screenshot, padding, calculateInnerDimensions]);
-
-  const handleCancelCrop = useCallback(() => {
-    setCropArea(null);
-    setActiveTool('select');
-  }, []);
 
   // Export helpers
   const getCanvasDataUrl = useCallback((format: 'png' | 'jpeg'): string | null => {
@@ -840,13 +734,6 @@ function App() {
             hasSelection={!!selectedAnnotationId}
             selectedAnnotation={selectedAnnotationId ? annotations.find(a => a.id === selectedAnnotationId) : undefined}
           />
-          <CropToolbar
-            aspectRatio={aspectRatio}
-            onAspectRatioChange={setAspectRatio}
-            onApplyCrop={handleApplyCrop}
-            onCancelCrop={handleCancelCrop}
-            isCropActive={activeTool === 'crop'}
-          />
         </>
       )}
 
@@ -870,9 +757,6 @@ function App() {
           onAnnotationSelect={handleAnnotationSelect}
           onAnnotationUpdate={handleAnnotationUpdate}
           onToolChange={handleToolChange}
-          cropArea={cropArea}
-          aspectRatio={aspectRatio}
-          onCropChange={handleCropChange}
         />
 
         {screenshot && (
