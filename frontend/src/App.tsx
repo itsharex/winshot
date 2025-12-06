@@ -23,6 +23,7 @@ import {
   FinishRegionCapture,
   UpdateWindowSize,
   GetConfig,
+  OpenImage,
 } from '../wailsjs/go/main/App';
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
@@ -377,6 +378,33 @@ function App() {
     setSelectedAnnotationId(null);
     setStatusMessage(undefined);
   };
+
+  const handleImportImage = useCallback(async () => {
+    setStatusMessage('Opening file dialog...');
+
+    try {
+      const result = await OpenImage();
+
+      if (!result) {
+        // User cancelled
+        setStatusMessage(undefined);
+        return;
+      }
+
+      setScreenshot(result as CaptureResult);
+      // Reset annotations and crop state for imported image
+      setAnnotations([]);
+      setSelectedAnnotationId(null);
+      setCropArea(null);
+      setActiveTool('select');
+      setStatusMessage('Image imported successfully');
+      setTimeout(() => setStatusMessage(undefined), 2000);
+    } catch (error) {
+      console.error('Import failed:', error);
+      setStatusMessage('Failed to import image');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+    }
+  }, []);
 
   // Listen for global hotkey events from backend
   useEffect(() => {
@@ -745,9 +773,16 @@ function App() {
     setTimeout(() => setStatusMessage(undefined), 2000);
   }, []);
 
-  // Keyboard shortcuts for export
+  // Keyboard shortcuts for export and import
   useEffect(() => {
     const handleExportKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+O for import (works anytime)
+      if (e.ctrlKey && e.key === 'o') {
+        e.preventDefault();
+        handleImportImage();
+        return;
+      }
+
       if (!screenshot) return;
 
       if (e.ctrlKey && e.shiftKey && e.key === 'S') {
@@ -764,7 +799,7 @@ function App() {
 
     window.addEventListener('keydown', handleExportKeyDown);
     return () => window.removeEventListener('keydown', handleExportKeyDown);
-  }, [screenshot, handleSave, handleQuickSave, handleCopyToClipboard]);
+  }, [screenshot, handleSave, handleQuickSave, handleCopyToClipboard, handleImportImage]);
 
   return (
     <div className="flex flex-col h-screen bg-transparent">
@@ -776,6 +811,7 @@ function App() {
         onClear={handleClear}
         onMinimize={handleMinimizeToTray}
         onOpenSettings={() => setShowSettings(true)}
+        onImportImage={handleImportImage}
       />
 
       {screenshot && (

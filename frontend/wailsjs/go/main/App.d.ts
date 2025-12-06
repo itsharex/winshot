@@ -35,6 +35,8 @@ export function GetWindowListWithThumbnails():Promise<Array<windows.WindowInfoWi
 
 export function MinimizeToTray():Promise<void>;
 
+export function OpenImage():Promise<screenshot.CaptureResult>;
+
 export function PrepareRegionCapture():Promise<main.RegionCaptureData>;
 
 export function QuickSave(arg1:string,arg2:string):Promise<main.SaveImageResult>;

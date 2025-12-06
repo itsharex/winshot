@@ -1,14 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/webp"
 	"winshot/internal/config"
 	"winshot/internal/hotkeys"
 	"winshot/internal/screenshot"
@@ -539,4 +546,73 @@ func (a *App) SaveBackgroundImages(images []string) error {
 	}
 	a.config.BackgroundImages = images
 	return a.config.Save()
+}
+
+// OpenImage opens a file dialog to select an image and returns it as a CaptureResult
+func (a *App) OpenImage() (*screenshot.CaptureResult, error) {
+	// Show open file dialog
+	filePath, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Open Image",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Image Files", Pattern: "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp"},
+			{DisplayName: "PNG Images", Pattern: "*.png"},
+			{DisplayName: "JPEG Images", Pattern: "*.jpg;*.jpeg"},
+			{DisplayName: "GIF Images", Pattern: "*.gif"},
+			{DisplayName: "BMP Images", Pattern: "*.bmp"},
+			{DisplayName: "WebP Images", Pattern: "*.webp"},
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if filePath == "" {
+		return nil, nil // User cancelled
+	}
+
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode image to get dimensions
+	var img image.Image
+	ext := strings.ToLower(filepath.Ext(filePath))
+
+	switch ext {
+	case ".png":
+		img, err = png.Decode(bytes.NewReader(data))
+	case ".jpg", ".jpeg":
+		img, err = jpeg.Decode(bytes.NewReader(data))
+	case ".gif":
+		img, err = gif.Decode(bytes.NewReader(data))
+	case ".bmp":
+		img, err = bmp.Decode(bytes.NewReader(data))
+	case ".webp":
+		img, err = webp.Decode(bytes.NewReader(data))
+	default:
+		// Try to decode as any supported format
+		img, _, err = image.Decode(bytes.NewReader(data))
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+
+	// Re-encode as PNG for consistent handling in frontend
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+
+	// Return as base64 encoded PNG
+	return &screenshot.CaptureResult{
+		Width:  bounds.Dx(),
+		Height: bounds.Dy(),
+		Data:   base64.StdEncoding.EncodeToString(buf.Bytes()),
+	}, nil
 }

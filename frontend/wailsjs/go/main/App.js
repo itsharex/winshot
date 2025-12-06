@@ -62,6 +62,10 @@ export function MinimizeToTray() {
   return window['go']['main']['App']['MinimizeToTray']();
 }
 
+export function OpenImage() {
+  return window['go']['main']['App']['OpenImage']();
+}
+
 export function PrepareRegionCapture() {
   return window['go']['main']['App']['PrepareRegionCapture']();
 }
