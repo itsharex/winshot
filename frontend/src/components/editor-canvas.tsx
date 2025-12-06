@@ -33,7 +33,6 @@ interface EditorCanvasProps {
   cropArea: CropArea | null;
   cropAspectRatio: CropAspectRatio;
   isDrawingCrop: boolean;
-  appliedCrop: CropArea | null;
   onCropChange: (area: CropArea) => void;
   onCropStart: (area: CropArea) => void;
   onDrawingCropChange: (isDrawing: boolean) => void;
@@ -183,7 +182,6 @@ export function EditorCanvas({
   cropArea,
   cropAspectRatio,
   isDrawingCrop,
-  appliedCrop,
   onCropChange,
   onCropStart,
   onDrawingCropChange,
@@ -577,7 +575,7 @@ export function EditorCanvas({
   const imageSrc = `data:image/png;base64,${screenshot.data}`;
 
   // Calculate output dimensions based on ratio
-  const { totalWidth, totalHeight } = calculateOutputDimensions(
+  const { totalWidth: baseTotalWidth, totalHeight: baseTotalHeight } = calculateOutputDimensions(
     screenshot.width,
     screenshot.height,
     padding,
@@ -586,8 +584,8 @@ export function EditorCanvas({
 
   // Calculate image size while preserving aspect ratio
   // The padding value is the MINIMUM padding (applied to the constraining dimension)
-  const availableWidth = totalWidth - padding * 2;
-  const availableHeight = totalHeight - padding * 2;
+  const availableWidth = baseTotalWidth - padding * 2;
+  const availableHeight = baseTotalHeight - padding * 2;
   const imageAspectRatio = screenshot.width / screenshot.height;
   const availableAspectRatio = availableWidth / availableHeight;
 
@@ -605,8 +603,11 @@ export function EditorCanvas({
   }
 
   // Calculate actual padding (centered)
-  const actualPaddingX = (totalWidth - innerWidth) / 2;
-  const actualPaddingY = (totalHeight - innerHeight) / 2;
+  const actualPaddingX = (baseTotalWidth - innerWidth) / 2;
+  const actualPaddingY = (baseTotalHeight - innerHeight) / 2;
+  // With snapshot-based crop, the screenshot is already cropped, so we use full dimensions
+  const totalWidth = baseTotalWidth;
+  const totalHeight = baseTotalHeight;
 
   const stageWidth = totalWidth * scale;
   const stageHeight = totalHeight * scale;
@@ -675,11 +676,11 @@ export function EditorCanvas({
               <Rect
                 x={0}
                 y={0}
-                width={totalWidth}
-                height={totalHeight}
+                width={baseTotalWidth}
+                height={baseTotalHeight}
                 fill={isGradient ? undefined : backgroundColor}
                 fillLinearGradientStartPoint={isGradient ? { x: 0, y: 0 } : undefined}
-                fillLinearGradientEndPoint={isGradient ? { x: totalWidth, y: totalHeight } : undefined}
+                fillLinearGradientEndPoint={isGradient ? { x: baseTotalWidth, y: baseTotalHeight } : undefined}
                 fillLinearGradientColorStops={isGradient ? parseGradient(backgroundColor) : undefined}
               />
             )}
@@ -689,14 +690,14 @@ export function EditorCanvas({
               <Group
                 clipFunc={(ctx) => {
                   ctx.beginPath();
-                  ctx.rect(0, 0, totalWidth, totalHeight);
+                  ctx.rect(0, 0, baseTotalWidth, baseTotalHeight);
                   ctx.closePath();
                 }}
               >
                 <BackgroundImage
                   src={backgroundColor.slice(4, -1)}
-                  width={totalWidth}
-                  height={totalHeight}
+                  width={baseTotalWidth}
+                  height={baseTotalHeight}
                 />
               </Group>
             )}
@@ -738,8 +739,8 @@ export function EditorCanvas({
             {/* Spotlight overlays - dim areas outside spotlight regions */}
             <SpotlightOverlay
               spotlights={(tempAnnotation ? [...annotations, tempAnnotation] : annotations).filter(a => a.type === 'spotlight')}
-              totalWidth={totalWidth}
-              totalHeight={totalHeight}
+              totalWidth={baseTotalWidth}
+              totalHeight={baseTotalHeight}
             />
 
             {/* Crop overlay - visible when crop tool is active */}
@@ -752,7 +753,6 @@ export function EditorCanvas({
                 cropArea={cropArea}
                 aspectRatio={cropAspectRatio}
                 isDrawing={isDrawingCrop}
-                scale={scale}
                 onCropChange={onCropChange}
                 onCropStart={onCropStart}
                 onDrawingChange={onDrawingCropChange}

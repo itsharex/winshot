@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Group, Rect } from 'react-konva';
 import Konva from 'konva';
 import { CropArea, CropAspectRatio } from '../types';
@@ -19,8 +19,6 @@ interface CropOverlayProps {
   cropArea: CropArea | null;
   aspectRatio: CropAspectRatio;
   isDrawing: boolean;
-  // Stage scale for coordinate conversion
-  scale: number;
   // Callbacks
   onCropChange: (area: CropArea) => void;
   onCropStart: (area: CropArea) => void;
@@ -159,18 +157,12 @@ function applyConstraints(
   return result;
 }
 
-// Helper: Convert pointer position to canvas coordinates
-function pointerToCanvasCoords(
-  stage: Konva.Stage,
-  pointer: { x: number; y: number },
-  scale: number
-): { x: number; y: number } {
-  const stageX = stage.x();
-  const stageY = stage.y();
-  return {
-    x: (pointer.x - stageX) / scale,
-    y: (pointer.y - stageY) / scale,
-  };
+// Helper: Get pointer position in canvas coordinates
+// Uses Konva's getRelativePointerPosition() which correctly accounts for
+// stage position, scale, and any other transformations
+function getPointerCanvasPosition(stage: Konva.Stage): { x: number; y: number } | null {
+  const pos = stage.getRelativePointerPosition();
+  return pos;
 }
 
 // Sub-component: Darkened overlay (4 rects around crop area)
@@ -243,8 +235,7 @@ export function CropOverlay({
   imageHeight,
   cropArea,
   aspectRatio,
-  isDrawing,
-  scale,
+  isDrawing: _isDrawing,
   onCropChange,
   onCropStart,
   onDrawingChange,
@@ -263,11 +254,9 @@ export function CropOverlay({
     (e: Konva.KonvaEventObject<MouseEvent>): { x: number; y: number } | null => {
       const stage = e.target.getStage();
       if (!stage) return null;
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return null;
-      return pointerToCanvasCoords(stage, pointer, scale);
+      return getPointerCanvasPosition(stage);
     },
-    [scale]
+    []
   );
 
   // Calculate handle positions
@@ -444,27 +433,6 @@ export function CropOverlay({
     setDragMode('none');
   }, [dragMode, onDrawingChange]);
 
-  // Get cursor based on current state
-  const getCursor = useCallback((handlePos?: HandlePosition): string => {
-    if (handlePos) {
-      switch (handlePos) {
-        case 'tl':
-        case 'br':
-          return 'nwse-resize';
-        case 'tr':
-        case 'bl':
-          return 'nesw-resize';
-        case 't':
-        case 'b':
-          return 'ns-resize';
-        case 'l':
-        case 'r':
-          return 'ew-resize';
-      }
-    }
-    return dragMode === 'moving' ? 'move' : 'crosshair';
-  }, [dragMode]);
-
   // No crop area yet - render drawing area
   if (!cropArea) {
     return (
@@ -487,6 +455,7 @@ export function CropOverlay({
   // Render crop overlay with frame and handles
   return (
     <Group
+      name="crop-overlay"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}

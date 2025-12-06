@@ -67,6 +67,19 @@ export interface Annotation {
 
 export type EditorTool = 'select' | 'crop' | AnnotationType;
 
+// Crop state for snapshot-based crop workflow
+export interface CropState {
+  // Original image data (always preserved for re-crop)
+  originalImage: CaptureResult | null;
+  // Cropped image result (displayed when crop is applied)
+  croppedImage: CaptureResult | null;
+  // Original annotations before crop (for restore)
+  originalAnnotations: Annotation[];
+  // Last applied crop area (for showing previous selection on re-crop)
+  lastCropArea: CropArea | null;
+  // Whether crop is currently applied (showing cropped view)
+  isCropApplied: boolean;
+}
 
 // Output canvas ratio - determines the final export dimensions
 export type OutputRatio = 'auto' | '1:1' | '4:3' | '3:2' | '16:9' | '5:3' | '9:16' | '3:4' | '2:3';
