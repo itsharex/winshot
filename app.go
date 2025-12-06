@@ -152,8 +152,8 @@ func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 	// Hide the window first so it's not in the screenshot
 	runtime.WindowHide(a.ctx)
 
-	// Wait for window to fully hide
-	time.Sleep(150 * time.Millisecond)
+	// Wait for window to fully hide (350ms needed for Windows DWM compositor)
+	time.Sleep(350 * time.Millisecond)
 
 	// Capture the display where cursor is located (at physical/native resolution)
 	result, displayIndex, err := screenshot.CaptureActiveDisplay()
