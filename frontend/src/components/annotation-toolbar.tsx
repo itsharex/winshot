@@ -11,6 +11,7 @@ import {
   Bold,
   Italic,
   Spline,
+  Lightbulb,
 } from 'lucide-react';
 
 interface AnnotationToolbarProps {
@@ -129,6 +130,12 @@ export function AnnotationToolbar({
       label: 'Text',
       shortcut: 'T',
       icon: <Type className="w-5 h-5" />,
+    },
+    {
+      id: 'spotlight',
+      label: 'Spotlight',
+      shortcut: 'S',
+      icon: <Lightbulb className="w-5 h-5" />,
     },
     {
       id: 'crop',

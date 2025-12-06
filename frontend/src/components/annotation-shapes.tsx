@@ -533,6 +533,68 @@ function LineShape({ annotation, isSelected, onSelect, onUpdate }: ShapeProps) {
   );
 }
 
+function SpotlightShape({ annotation, isSelected, onSelect, onUpdate }: ShapeProps) {
+  const shapeRef = useRef<Konva.Rect>(null);
+  const trRef = useRef<Konva.Transformer>(null);
+
+  useEffect(() => {
+    if (isSelected && trRef.current && shapeRef.current) {
+      trRef.current.nodes([shapeRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
+
+  return (
+    <>
+      <Rect
+        ref={shapeRef}
+        x={annotation.x}
+        y={annotation.y}
+        width={annotation.width}
+        height={annotation.height}
+        stroke={isSelected ? annotation.stroke : 'transparent'}
+        strokeWidth={isSelected ? 2 : 0}
+        dash={isSelected ? [8, 4] : undefined}
+        fill="transparent"
+        draggable
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          onUpdate({
+            x: e.target.x(),
+            y: e.target.y(),
+          });
+        }}
+        onTransformEnd={() => {
+          const node = shapeRef.current;
+          if (!node) return;
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+          node.scaleX(1);
+          node.scaleY(1);
+          onUpdate({
+            x: node.x(),
+            y: node.y(),
+            width: Math.max(20, node.width() * scaleX),
+            height: Math.max(20, node.height() * scaleY),
+          });
+        }}
+      />
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 20 || newBox.height < 20) {
+              return oldBox;
+            }
+            return newBox;
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 function TextShape({ annotation, isSelected, onSelect, onUpdate }: ShapeProps) {
   const shapeRef = useRef<Konva.Text>(null);
   const trRef = useRef<Konva.Transformer>(null);
@@ -742,6 +804,8 @@ export function AnnotationShapes({
             return <LineShape key={annotation.id} {...props} />;
           case 'text':
             return <TextShape key={annotation.id} {...props} />;
+          case 'spotlight':
+            return <SpotlightShape key={annotation.id} {...props} />;
           default:
             return null;
         }

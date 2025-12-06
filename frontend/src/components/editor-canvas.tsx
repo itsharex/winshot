@@ -5,6 +5,7 @@ import Konva from 'konva';
 import { CaptureResult, Annotation, AnnotationType, EditorTool, CropArea, AspectRatio, OutputRatio } from '../types';
 import { AnnotationShapes } from './annotation-shapes';
 import { CropOverlay } from './crop-overlay';
+import { SpotlightOverlay } from './spotlight-overlay';
 import { ImageIcon } from 'lucide-react';
 
 interface EditorCanvasProps {
@@ -721,6 +722,13 @@ export function EditorCanvas({
               onSelect={onAnnotationSelect}
               onUpdate={onAnnotationUpdate}
               scale={scale}
+            />
+
+            {/* Spotlight overlays - dim areas outside spotlight regions */}
+            <SpotlightOverlay
+              spotlights={(tempAnnotation ? [...annotations, tempAnnotation] : annotations).filter(a => a.type === 'spotlight')}
+              totalWidth={totalWidth}
+              totalHeight={totalHeight}
             />
 
             {/* Crop overlay */}

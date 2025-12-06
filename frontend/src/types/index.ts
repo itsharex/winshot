@@ -27,7 +27,7 @@ export interface EditorState {
 }
 
 // Annotation types
-export type AnnotationType = 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text';
+export type AnnotationType = 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'spotlight';
 
 export interface Annotation {
   id: string;
@@ -51,6 +51,8 @@ export interface Annotation {
   fontFamily?: string;
   fontStyle?: 'normal' | 'bold' | 'italic' | 'bold italic';
   textAlign?: 'left' | 'center' | 'right';
+  // For spotlight annotations
+  dimOpacity?: number; // Opacity of the dimmed area (0-1, default 0.7)
 }
 
 export type EditorTool = 'select' | 'crop' | AnnotationType;
