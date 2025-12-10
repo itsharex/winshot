@@ -1,6 +1,7 @@
 package hotkeys
 
 import (
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -103,17 +104,7 @@ func (m *HotkeyManager) Register(id int, modifiers, keyCode uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ret, _, err := procRegisterHotKey.Call(
-		0,
-		uintptr(id),
-		uintptr(modifiers),
-		uintptr(keyCode),
-	)
-
-	if ret == 0 {
-		return err
-	}
-
+	// Store in map - actual Win32 registration happens in messageLoop
 	m.hotkeys[id] = &Hotkey{
 		ID:        id,
 		Modifiers: modifiers,
@@ -128,19 +119,7 @@ func (m *HotkeyManager) Unregister(id int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.hotkeys[id]; !exists {
-		return nil
-	}
-
-	ret, _, err := procUnregisterHotKey.Call(
-		0,
-		uintptr(id),
-	)
-
-	if ret == 0 {
-		return err
-	}
-
+	// Just remove from map - actual unregistration happens in messageLoop on stop
 	delete(m.hotkeys, id)
 	return nil
 }
@@ -186,10 +165,27 @@ func (m *HotkeyManager) Stop() {
 }
 
 func (m *HotkeyManager) messageLoop() {
+	// CRITICAL: Lock this goroutine to current OS thread
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Register all hotkeys ON THIS THREAD (they were stored in map by Register())
+	m.mu.Lock()
+	for id, hk := range m.hotkeys {
+		procRegisterHotKey.Call(0, uintptr(id), uintptr(hk.Modifiers), uintptr(hk.KeyCode))
+	}
+	m.mu.Unlock()
+
 	var msg MSG
 	for {
 		select {
 		case <-m.stopCh:
+			// Unregister all before exiting
+			m.mu.Lock()
+			for id := range m.hotkeys {
+				procUnregisterHotKey.Call(0, uintptr(id))
+			}
+			m.mu.Unlock()
 			return
 		default:
 			// Non-blocking message peek
@@ -201,16 +197,13 @@ func (m *HotkeyManager) messageLoop() {
 				PM_REMOVE,
 			)
 
-			if ret != 0 {
-				if msg.Message == WM_HOTKEY {
-					m.mu.Lock()
-					cb := m.callback
-					m.mu.Unlock()
+			if ret != 0 && msg.Message == WM_HOTKEY {
+				m.mu.Lock()
+				cb := m.callback
+				m.mu.Unlock()
 
-					if cb != nil {
-						hotkeyID := int(msg.WParam)
-						cb(hotkeyID)
-					}
+				if cb != nil {
+					cb(int(msg.WParam))
 				}
 			}
 
