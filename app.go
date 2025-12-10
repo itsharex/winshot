@@ -73,6 +73,15 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize window size tracking with config values
 	a.lastWidth = cfg.Window.Width
 	a.lastHeight = cfg.Window.Height
+
+	// Handle "start minimized to tray" setting
+	if cfg.Startup.MinimizeToTray {
+		// Use goroutine with delay to let window fully initialize first
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			runtime.WindowHide(a.ctx)
+		}()
+	}
 }
 
 // shutdown is called when the app is closing
