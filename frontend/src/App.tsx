@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Konva from 'konva';
 import { TitleBar } from './components/title-bar';
 import { CaptureToolbar } from './components/capture-toolbar';
@@ -139,46 +139,66 @@ function constrainToAspectRatio(area: CropArea, ratio: CropAspectRatio): CropAre
   }
 }
 
-// Helper to copy screenshot to clipboard with format from config
-async function copyScreenshotToClipboard(screenshotData: string, format: 'png' | 'jpeg', jpegQuality: number): Promise<boolean> {
+// Helper to copy rendered canvas to clipboard (with all editor settings applied)
+async function copyRenderedCanvasToClipboard(
+  stageRef: React.RefObject<Konva.Stage | null>,
+  screenshot: CaptureResult,
+  padding: number,
+  outputRatio: OutputRatio
+): Promise<boolean> {
+  const stage = stageRef.current;
+  if (!stage) return false;
+
   try {
-    // Create an image from the base64 data
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = `data:image/png;base64,${screenshotData}`;
+    // Calculate the actual output dimensions
+    const { totalWidth, totalHeight } = calculateOutputDimensions(
+      screenshot.width,
+      screenshot.height,
+      padding,
+      outputRatio
+    );
+
+    // Save current stage properties
+    const oldScaleX = stage.scaleX();
+    const oldScaleY = stage.scaleY();
+    const oldX = stage.x();
+    const oldY = stage.y();
+
+    // Reset stage transform for accurate export at 1:1 scale
+    stage.scaleX(1);
+    stage.scaleY(1);
+    stage.x(0);
+    stage.y(0);
+
+    // Export only the canvas content area
+    const canvas = stage.toCanvas({
+      pixelRatio: 1,
+      x: 0,
+      y: 0,
+      width: totalWidth,
+      height: totalHeight,
     });
 
-    // Create canvas and draw image
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return false;
-    ctx.drawImage(img, 0, 0);
-
-    // Convert to blob with appropriate format
-    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-    const quality = format === 'jpeg' ? jpegQuality / 100 : undefined;
+    // Restore stage properties
+    stage.scaleX(oldScaleX);
+    stage.scaleY(oldScaleY);
+    stage.x(oldX);
+    stage.y(oldY);
 
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, mimeType, quality);
+      canvas.toBlob(resolve, 'image/png');
     });
 
     if (!blob) return false;
 
-    // Copy to clipboard - always use PNG for clipboard compatibility
     await navigator.clipboard.write([
       new ClipboardItem({
-        'image/png': format === 'png' ? blob : await new Promise<Blob>((resolve) => {
-          canvas.toBlob((b) => resolve(b!), 'image/png');
-        }),
+        'image/png': blob,
       }),
     ]);
     return true;
   } catch (error) {
-    console.error('Failed to copy screenshot to clipboard:', error);
+    console.error('Failed to copy rendered canvas to clipboard:', error);
     return false;
   }
 }
@@ -305,14 +325,13 @@ function App() {
       setActiveTool('select');
       setStatusMessage(undefined);
 
-      // Auto-copy to clipboard if enabled (delay to ensure window is visible)
+      // Auto-copy rendered canvas to clipboard if enabled
+      // Delay to ensure Konva stage has rendered with editor settings applied
       setTimeout(async () => {
         try {
           const cfg = await GetConfig();
           if (cfg.export?.autoCopyToClipboard) {
-            const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
-            const quality = cfg.export?.jpegQuality || 95;
-            const success = await copyScreenshotToClipboard(result.data, format, quality);
+            const success = await copyRenderedCanvasToClipboard(stageRef, result, padding, outputRatio);
             if (success) {
               setStatusMessage('Copied to clipboard!');
               setTimeout(() => setStatusMessage(undefined), 2000);
@@ -321,7 +340,7 @@ function App() {
         } catch (err) {
           console.error('Auto-copy failed:', err);
         }
-      }, 100);
+      }, 300);
     } catch (error) {
       console.error('Capture failed:', error);
       setStatusMessage('Capture failed');
@@ -329,7 +348,7 @@ function App() {
     }
 
     setIsCapturing(false);
-  }, []);
+  }, [padding, outputRatio]);
 
   const handleWindowSelect = async (window: WindowInfo) => {
     setShowWindowPicker(false);
@@ -345,14 +364,13 @@ function App() {
       setActiveTool('select');
       setStatusMessage(undefined);
 
-      // Auto-copy to clipboard if enabled (delay to ensure window is visible)
+      // Auto-copy rendered canvas to clipboard if enabled
+      // Delay to ensure Konva stage has rendered with editor settings applied
       setTimeout(async () => {
         try {
           const cfg = await GetConfig();
           if (cfg.export?.autoCopyToClipboard) {
-            const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
-            const quality = cfg.export?.jpegQuality || 95;
-            const success = await copyScreenshotToClipboard(result.data, format, quality);
+            const success = await copyRenderedCanvasToClipboard(stageRef, result, padding, outputRatio);
             if (success) {
               setStatusMessage('Copied to clipboard!');
               setTimeout(() => setStatusMessage(undefined), 2000);
@@ -361,7 +379,7 @@ function App() {
         } catch (err) {
           console.error('Auto-copy failed:', err);
         }
-      }, 100);
+      }, 300);
     } catch (error) {
       console.error('Window capture failed:', error);
       setStatusMessage('Capture failed');
@@ -424,14 +442,18 @@ function App() {
         setRegionScreenshot(undefined);
         setRegionScaleRatio(1);
 
-        // Auto-copy to clipboard if enabled (delay to ensure window is visible)
+        // Auto-copy rendered canvas to clipboard if enabled
+        // Delay to ensure Konva stage has rendered with editor settings applied
+        const capturedResult: CaptureResult = {
+          width: scaledWidth,
+          height: scaledHeight,
+          data: croppedData,
+        };
         setTimeout(async () => {
           try {
             const cfg = await GetConfig();
             if (cfg.export?.autoCopyToClipboard) {
-              const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
-              const quality = cfg.export?.jpegQuality || 95;
-              const success = await copyScreenshotToClipboard(croppedData, format, quality);
+              const success = await copyRenderedCanvasToClipboard(stageRef, capturedResult, padding, outputRatio);
               if (success) {
                 setStatusMessage('Copied to clipboard!');
                 setTimeout(() => setStatusMessage(undefined), 2000);
@@ -440,7 +462,7 @@ function App() {
           } catch (err) {
             console.error('Auto-copy failed:', err);
           }
-        }, 100);
+        }, 300);
       };
       img.onerror = () => {
         setStatusMessage('Failed to load screenshot');
