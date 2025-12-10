@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
@@ -73,6 +74,15 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize window size tracking with config values
 	a.lastWidth = cfg.Window.Width
 	a.lastHeight = cfg.Window.Height
+
+	// Handle "start minimized to tray" setting
+	if cfg.Startup.MinimizeToTray {
+		// Use goroutine with delay to let window fully initialize first
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			runtime.WindowHide(a.ctx)
+		}()
+	}
 }
 
 // shutdown is called when the app is closing
@@ -116,7 +126,16 @@ func (a *App) onTrayMenu(menuID int) {
 	case tray.MenuWindow:
 		runtime.EventsEmit(a.ctx, "hotkey:window")
 	case tray.MenuQuit:
-		runtime.Quit(a.ctx)
+		// Quit the application - use goroutine to avoid blocking tray menu
+		go func() {
+			// First try graceful shutdown via runtime.Quit
+			// This may not work reliably on Windows from a goroutine
+			runtime.Quit(a.ctx)
+
+			// Fallback: force exit after a short delay if Quit didn't work
+			time.Sleep(500 * time.Millisecond)
+			os.Exit(0)
+		}()
 	}
 }
 
@@ -441,22 +460,25 @@ func (a *App) SaveImage(imageData string, format string) SaveImageResult {
 	return SaveImageResult{Success: true, FilePath: filePath}
 }
 
-// QuickSave saves a base64 encoded image to a predefined directory
+// QuickSave saves a base64 encoded image to the configured directory
 func (a *App) QuickSave(imageData string, format string) SaveImageResult {
-	// Get user's Pictures folder
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return SaveImageResult{Success: false, Error: "Failed to get home directory: " + err.Error()}
+	// Get save directory from config (fallback to default)
+	saveDir := a.config.QuickSave.Folder
+	if saveDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return SaveImageResult{Success: false, Error: "Failed to get home directory: " + err.Error()}
+		}
+		saveDir = filepath.Join(homeDir, "Pictures", "WinShot")
 	}
 
-	// Create WinShot folder in Pictures
-	saveDir := filepath.Join(homeDir, "Pictures", "WinShot")
-	err = os.MkdirAll(saveDir, 0755)
+	// Create save directory if it doesn't exist
+	err := os.MkdirAll(saveDir, 0755)
 	if err != nil {
 		return SaveImageResult{Success: false, Error: "Failed to create save directory: " + err.Error()}
 	}
 
-	// Generate filename with timestamp
+	// Determine file extension
 	var ext string
 	switch strings.ToLower(format) {
 	case "jpeg", "jpg":
@@ -465,8 +487,47 @@ func (a *App) QuickSave(imageData string, format string) SaveImageResult {
 		ext = ".png"
 	}
 
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := "winshot_" + timestamp + ext
+	// Generate filename based on configured pattern
+	var filename string
+	now := time.Now()
+	pattern := a.config.QuickSave.Pattern
+	if pattern == "" {
+		pattern = "timestamp"
+	}
+
+	switch pattern {
+	case "date":
+		// Date only: winshot_2024-01-15.png
+		filename = "winshot_" + now.Format("2006-01-02") + ext
+		// Avoid overwriting: append counter if file exists
+		filePath := filepath.Join(saveDir, filename)
+		if _, err := os.Stat(filePath); err == nil {
+			counter := 1
+			for {
+				filename = "winshot_" + now.Format("2006-01-02") + "_" + fmt.Sprintf("%d", counter) + ext
+				filePath = filepath.Join(saveDir, filename)
+				if _, err := os.Stat(filePath); os.IsNotExist(err) {
+					break
+				}
+				counter++
+			}
+		}
+	case "increment":
+		// Incremental: winshot_001.png, winshot_002.png
+		counter := 1
+		for {
+			filename = fmt.Sprintf("winshot_%03d%s", counter, ext)
+			filePath := filepath.Join(saveDir, filename)
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				break
+			}
+			counter++
+		}
+	default: // "timestamp"
+		// Full timestamp: winshot_2024-01-15_14-30-45.png
+		filename = "winshot_" + now.Format("2006-01-02_15-04-05") + ext
+	}
+
 	filePath := filepath.Join(saveDir, filename)
 
 	// Decode and save

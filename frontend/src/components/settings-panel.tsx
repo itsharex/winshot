@@ -4,6 +4,44 @@ import { GetBackgroundImages, SaveBackgroundImages } from '../../wailsjs/go/main
 import { X, ImagePlus } from 'lucide-react';
 
 const MAX_BACKGROUND_IMAGES = 8;
+const MAX_BG_IMAGE_SIZE = 2048;  // Max dimension
+const BG_IMAGE_QUALITY = 0.85;   // JPEG quality
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      let { width, height } = img;
+      if (width > MAX_BG_IMAGE_SIZE || height > MAX_BG_IMAGE_SIZE) {
+        const ratio = Math.min(MAX_BG_IMAGE_SIZE / width, MAX_BG_IMAGE_SIZE / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', BG_IMAGE_QUALITY));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+
+    img.src = url;
+  });
+}
 
 // Output ratio presets with display labels
 const OUTPUT_RATIO_PRESETS: { value: OutputRatio; label: string }[] = [
@@ -97,25 +135,23 @@ export function SettingsPanel({
   // Max padding is 1/3 of the smaller dimension
   const maxPadding = Math.floor(Math.min(imageWidth, imageHeight) / 3);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && uploadedImages.length < MAX_BACKGROUND_IMAGES) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        const newImages = [...uploadedImages, dataUrl];
-        setUploadedImages(newImages);
-        // Persist to Go backend
-        SaveBackgroundImages(newImages).catch(() => {
-          // Silent fail - images still work in current session
-        });
-        onBackgroundChange(`url(${dataUrl})`);
-      };
-      reader.readAsDataURL(file);
-    }
-    // Reset input so same file can be uploaded again
+    if (!file || uploadedImages.length >= MAX_BACKGROUND_IMAGES) return;
+
+    // Reset input first for responsiveness
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+
+    try {
+      const dataUrl = await compressImage(file);
+      const newImages = [...uploadedImages, dataUrl];
+      setUploadedImages(newImages);
+      SaveBackgroundImages(newImages).catch(() => {});
+      onBackgroundChange(`url(${dataUrl})`);
+    } catch (error) {
+      console.error('Failed to process image:', error);
     }
   };
 
