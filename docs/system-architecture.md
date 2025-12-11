@@ -56,6 +56,7 @@ app.go (App struct)
 ├── [Screenshot Methods] → internal/screenshot
 │   ├── CaptureFullscreen() → CaptureResult
 │   ├── CaptureWindow(handle) → CaptureResult
+│   ├── GetClipboardImage() → CaptureResult
 │   ├── PrepareRegionCapture() → DisplayBounds
 │   └── FinishRegionCapture(x, y, w, h) → CaptureResult
 │
@@ -169,7 +170,7 @@ func (a *App) onHotkey(id int) {
 
 ### Package: `internal/screenshot`
 
-**Responsibility:** Screen and window capture with DPI awareness
+**Responsibility:** Screen, window, and clipboard image capture with DPI awareness
 
 **Capture Modes:**
 ```
@@ -188,7 +189,23 @@ func (a *App) onHotkey(id int) {
    ├─ Use GDI to capture window content
    ├─ Apply DPI scaling
    └─ Return CaptureResult
+
+4. Clipboard
+   ├─ Lock OS thread (Win32 clipboard requirement)
+   ├─ Open clipboard and check for DIB format
+   ├─ Parse BITMAPINFOHEADER (width, height, bit depth)
+   ├─ Convert DIB (24-bit BGR or 32-bit BGRA) to RGBA
+   ├─ Handle both top-down and bottom-up image layouts
+   ├─ Encode as PNG
+   └─ Return CaptureResult or error ("no image in clipboard")
 ```
+
+**Clipboard Implementation Details:**
+- **Thread Safety:** `runtime.LockOSThread()` ensures OpenClipboard/CloseClipboard on same thread
+- **Formats Supported:** 24-bit BGR, 32-bit BGRA DIB (via CF_DIB flag)
+- **Size Limit:** 100MB max (prevents DoS attacks)
+- **Buffer Safety:** Validates pixel data bounds before access via unsafe pointers
+- **Alpha Handling:** Sets alpha=255 for 32-bit if source alpha is 0 (compatibility with some apps)
 
 **Data Format:**
 ```
@@ -488,6 +505,31 @@ App.handleExport()
      └─ Return success/error
   ↓
 setStatusMessage('Exported successfully')
+```
+
+**Clipboard Capture Flow:**
+```
+User clicks "Clipboard" button
+  ↓
+CaptureToolbar.onClipboardCapture
+  ↓
+App.handleClipboardCapture()
+  ├─ setIsCapturing(true)
+  ├─ Call GetClipboardImage() [Go binding]
+  │  └─ Go: Lock OS thread
+  │  └─ Open clipboard, check for DIB format
+  │  └─ Parse BITMAPINFOHEADER
+  │  └─ Convert DIB (24/32-bit) to RGBA
+  │  └─ Encode as PNG
+  │  └─ Return CaptureResult {width, height, data} or error
+  ├─ If success: setScreenshot(result)
+  ├─ If error: setStatusMessage("No image in clipboard")
+  └─ setIsCapturing(false)
+  ↓
+EditorCanvas re-renders with clipboard image
+  ├─ Create image from base64 data
+  ├─ Render Konva Stage with image
+  └─ Setup mouse handlers for annotation
 ```
 
 **Hotkey Event Flow:**

@@ -30,6 +30,10 @@ export function GetBackgroundImages() {
   return window['go']['main']['App']['GetBackgroundImages']();
 }
 
+export function GetClipboardImage() {
+  return window['go']['main']['App']['GetClipboardImage']();
+}
+
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }

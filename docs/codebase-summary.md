@@ -60,7 +60,8 @@ D:\www\winshot/
 │   │   └── hotkeys.go              # RegisterHotKey() implementation
 │   ├── screenshot/
 │   │   ├── capture.go              # Multi-display screen capture
-│   │   └── window.go               # Window capture + DPI handling
+│   │   ├── window.go               # Window capture + DPI handling
+│   │   └── clipboard.go            # Win32 clipboard DIB image reader
 │   ├── tray/
 │   │   └── tray.go                 # System tray icon + menu
 │   └── windows/
@@ -137,21 +138,31 @@ const (
 - `Stop()` - Stop listening gracefully
 
 ### Package: `internal/screenshot`
-**Files:** capture.go (120 LOC), window.go (90 LOC)
+**Files:** capture.go (120 LOC), window.go (90 LOC), clipboard.go (200 LOC)
 
-Wraps kbinani/screenshot library with DPI-awareness and multi-display support.
+Wraps kbinani/screenshot library with DPI-awareness, multi-display support, and Windows clipboard integration.
 
 **Features:**
 - `CaptureFullscreen()` - All displays combined
 - `CaptureRegion(x, y, w, h)` - Bounded area capture
 - `CaptureWindow(hwnd)` - Specific window capture with GDI
+- `GetClipboardImage()` - Read DIB format images from Windows clipboard
 - DPI scaling calculations
 - Base64 PNG encoding for transport
+
+**Clipboard Implementation:**
+- Uses Win32 API: OpenClipboard, GetClipboardData, GlobalLock
+- Supports 24-bit BGR and 32-bit BGRA DIB formats
+- Thread-safe with `runtime.LockOSThread()` (clipboard API requirement)
+- Handles top-down and bottom-up image layouts
+- 100MB max size limit (DoS prevention)
+- Converts DIB to RGBA PNG for consistent output
 
 **Entry Points:**
 - `CaptureFullscreen()` → CaptureResult
 - `CaptureRegion(x, y, w, h)` → CaptureResult
 - `CaptureWindow(hwnd)` → CaptureResult
+- `GetClipboardImage()` → CaptureResult (new)
 
 ### Package: `internal/tray`
 **File:** tray.go (180 LOC)
@@ -187,11 +198,12 @@ Window enumeration via `EnumWindows()` callback.
 
 Central App struct with all Wails-bound methods called from frontend.
 
-**Key Methods (~25 total):**
+**Key Methods (~26 total):**
 ```go
 // Capture operations
 CaptureFullscreen()
 CaptureWindow(handle int)
+GetClipboardImage()
 PrepareRegionCapture()
 FinishRegionCapture(x, y, w, h int)
 

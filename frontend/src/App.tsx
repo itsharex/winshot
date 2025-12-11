@@ -24,6 +24,7 @@ import {
   UpdateWindowSize,
   GetConfig,
   OpenImage,
+  GetClipboardImage,
 } from '../wailsjs/go/main/App';
 import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
 
@@ -503,6 +504,39 @@ function App() {
     } catch (error) {
       console.error('Import failed:', error);
       setStatusMessage('Failed to import image');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+    }
+  }, []);
+
+  const handleClipboardCapture = useCallback(async () => {
+    try {
+      const result = await GetClipboardImage();
+
+      if (!result) {
+        setStatusMessage('No image in clipboard');
+        setTimeout(() => setStatusMessage(undefined), 3000);
+        return;
+      }
+
+      setScreenshot(result as CaptureResult);
+      // Reset annotations and crop state for clipboard image
+      setAnnotations([]);
+      setSelectedAnnotationId(null);
+      setActiveTool('select');
+      setCropState({
+        originalImage: null,
+        croppedImage: null,
+        originalAnnotations: [],
+        lastCropArea: null,
+        isCropApplied: false,
+      });
+      setCropArea(null);
+      setCropMode(false);
+      setStatusMessage('Image pasted from clipboard');
+      setTimeout(() => setStatusMessage(undefined), 2000);
+    } catch (error) {
+      console.error('Clipboard paste failed:', error);
+      setStatusMessage('No image in clipboard');
       setTimeout(() => setStatusMessage(undefined), 3000);
     }
   }, []);
@@ -1087,6 +1121,7 @@ function App() {
         onMinimize={handleMinimizeToTray}
         onOpenSettings={() => setShowSettings(true)}
         onImportImage={handleImportImage}
+        onClipboardCapture={handleClipboardCapture}
       />
 
       {screenshot && !cropMode && (

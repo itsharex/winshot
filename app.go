@@ -650,3 +650,8 @@ func (a *App) OpenImage() (*screenshot.CaptureResult, error) {
 		Data:   base64.StdEncoding.EncodeToString(buf.Bytes()),
 	}, nil
 }
+
+// GetClipboardImage reads an image from the Windows clipboard
+func (a *App) GetClipboardImage() (*screenshot.CaptureResult, error) {
+	return screenshot.GetClipboardImage()
+}

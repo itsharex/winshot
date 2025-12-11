@@ -19,6 +19,8 @@ export function GetActiveDisplayIndex():Promise<number>;
 
 export function GetBackgroundImages():Promise<Array<string>>;
 
+export function GetClipboardImage():Promise<screenshot.CaptureResult>;
+
 export function GetConfig():Promise<config.Config>;
 
 export function GetDisplayBounds(arg1:number):Promise<main.DisplayBounds>;
