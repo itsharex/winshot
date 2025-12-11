@@ -33,6 +33,8 @@ type App struct {
 	lastHeight       int
 	preCaptureWidth  int // Window size before capture (protected from resize events)
 	preCaptureHeight int
+	preCaptureX      int  // Window X position before capture
+	preCaptureY      int  // Window Y position before capture
 	isCapturing      bool // Flag to prevent resize events during capture
 }
 
@@ -165,6 +167,9 @@ type RegionCaptureData struct {
 func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 	// Set capturing flag to prevent resize events from overwriting saved size
 	a.isCapturing = true
+
+	// Save current window position before hiding
+	a.preCaptureX, a.preCaptureY = runtime.WindowGetPosition(a.ctx)
 
 	// Save current window size before hiding (protected from resize events)
 	width, height := runtime.WindowGetSize(a.ctx)
@@ -299,8 +304,8 @@ func (a *App) FinishRegionCapture() {
 	// Clear capturing flag to allow resize tracking again
 	a.isCapturing = false
 
-	// Center the window
-	runtime.WindowCenter(a.ctx)
+	// Restore window to original position
+	runtime.WindowSetPosition(a.ctx, a.preCaptureX, a.preCaptureY)
 }
 
 // ShowWindow shows the main window
