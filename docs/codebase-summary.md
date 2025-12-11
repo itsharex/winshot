@@ -138,17 +138,26 @@ const (
 - `Stop()` - Stop listening gracefully
 
 ### Package: `internal/screenshot`
-**Files:** capture.go (120 LOC), window.go (90 LOC), clipboard.go (200 LOC)
+**Files:** capture.go (150 LOC), window.go (90 LOC), clipboard.go (200 LOC)
 
 Wraps kbinani/screenshot library with DPI-awareness, multi-display support, and Windows clipboard integration.
 
 **Features:**
 - `CaptureFullscreen()` - All displays combined
-- `CaptureRegion(x, y, w, h)` - Bounded area capture
+- `CaptureRegion(x, y, w, h)` - Bounded area capture with multi-monitor support
+- `CaptureVirtualScreen()` - Capture entire virtual display (extended monitors)
+- `GetVirtualScreenBounds()` - Calculate combined bounds across all monitors
 - `CaptureWindow(hwnd)` - Specific window capture with GDI
 - `GetClipboardImage()` - Read DIB format images from Windows clipboard
 - DPI scaling calculations
 - Base64 PNG encoding for transport
+
+**Multi-Monitor Region Capture (v1.2):**
+- Virtual screen bounds detection using Windows GetSystemMetrics() API
+- Region selection overlay spans entire combined monitor space
+- Coordinates properly mapped for extended/duplicate display layouts
+- Window position restored after region capture completes
+- Frontend: region-selector.tsx uses actual virtual bounds instead of 100vw/100vh
 
 **Clipboard Implementation:**
 - Uses Win32 API: OpenClipboard, GetClipboardData, GlobalLock
@@ -161,6 +170,8 @@ Wraps kbinani/screenshot library with DPI-awareness, multi-display support, and 
 **Entry Points:**
 - `CaptureFullscreen()` → CaptureResult
 - `CaptureRegion(x, y, w, h)` → CaptureResult
+- `CaptureVirtualScreen()` → CaptureResult (new)
+- `GetVirtualScreenBounds()` → (width, height int) (new)
 - `CaptureWindow(hwnd)` → CaptureResult
 - `GetClipboardImage()` → CaptureResult (new)
 
@@ -198,14 +209,16 @@ Window enumeration via `EnumWindows()` callback.
 
 Central App struct with all Wails-bound methods called from frontend.
 
-**Key Methods (~26 total):**
+**Key Methods (~28 total):**
 ```go
 // Capture operations
 CaptureFullscreen()
 CaptureWindow(handle int)
 GetClipboardImage()
-PrepareRegionCapture()
-FinishRegionCapture(x, y, w, h int)
+PrepareRegionCapture()               // Updated: multi-monitor support
+FinishRegionCapture(x, y, w, h int)  // Updated: window position restore
+CaptureVirtualScreen()               // New: capture extended displays
+GetVirtualScreenBounds()             // New: get combined monitor bounds
 
 // File operations
 SaveImage(data, path, filename string)

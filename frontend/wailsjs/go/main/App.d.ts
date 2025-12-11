@@ -29,6 +29,8 @@ export function GetDisplayCount():Promise<number>;
 
 export function GetHotkeyConfig():Promise<main.HotkeyConfig>;
 
+export function GetVirtualScreenBounds():Promise<main.VirtualScreenBounds>;
+
 export function GetWindowInfo(arg1:number):Promise<windows.WindowInfo>;
 
 export function GetWindowList():Promise<Array<windows.WindowInfo>>;

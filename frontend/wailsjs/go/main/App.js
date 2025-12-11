@@ -50,6 +50,10 @@ export function GetHotkeyConfig() {
   return window['go']['main']['App']['GetHotkeyConfig']();
 }
 
+export function GetVirtualScreenBounds() {
+  return window['go']['main']['App']['GetVirtualScreenBounds']();
+}
+
 export function GetWindowInfo(arg1) {
   return window['go']['main']['App']['GetWindowInfo'](arg1);
 }
