@@ -1,3 +1,10 @@
+# [1.2.0-beta.2](https://github.com/mrgoonie/winshot/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2025-12-12)
+
+
+### Features
+
+* add background visibility toggle and improve overlay focus ([39fadf3](https://github.com/mrgoonie/winshot/commit/39fadf3e59c211adc0d56f604266282302d8a80e))
+
 # [1.2.0-beta.1](https://github.com/mrgoonie/winshot/compare/v1.1.0...v1.2.0-beta.1) (2025-12-12)
 
 
