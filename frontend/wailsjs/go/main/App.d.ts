@@ -19,6 +19,8 @@ export function GetActiveDisplayIndex():Promise<number>;
 
 export function GetBackgroundImages():Promise<Array<string>>;
 
+export function GetClipboardImage():Promise<screenshot.CaptureResult>;
+
 export function GetConfig():Promise<config.Config>;
 
 export function GetDisplayBounds(arg1:number):Promise<main.DisplayBounds>;
@@ -26,6 +28,8 @@ export function GetDisplayBounds(arg1:number):Promise<main.DisplayBounds>;
 export function GetDisplayCount():Promise<number>;
 
 export function GetHotkeyConfig():Promise<main.HotkeyConfig>;
+
+export function GetVirtualScreenBounds():Promise<main.VirtualScreenBounds>;
 
 export function GetWindowInfo(arg1:number):Promise<windows.WindowInfo>;
 

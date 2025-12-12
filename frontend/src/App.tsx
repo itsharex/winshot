@@ -1,9 +1,8 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Konva from 'konva';
 import { TitleBar } from './components/title-bar';
 import { CaptureToolbar } from './components/capture-toolbar';
 import { WindowPicker } from './components/window-picker';
-import { RegionSelector } from './components/region-selector';
 import { EditorCanvas } from './components/editor-canvas';
 import { SettingsPanel } from './components/settings-panel';
 import { SettingsModal } from './components/settings-modal';
@@ -15,7 +14,6 @@ import { CaptureResult, CaptureMode, WindowInfo, Annotation, EditorTool, OutputR
 import {
   CaptureFullscreen,
   CaptureWindow,
-  GetDisplayBounds,
   SaveImage,
   QuickSave,
   MinimizeToTray,
@@ -24,8 +22,9 @@ import {
   UpdateWindowSize,
   GetConfig,
   OpenImage,
+  GetClipboardImage,
 } from '../wailsjs/go/main/App';
-import { EventsOn, EventsOff, WindowGetSize, Quit } from '../wailsjs/runtime/runtime';
+import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
 
 // Storage key for persistent editor settings
 const EDITOR_SETTINGS_KEY = 'winshot-editor-settings';
@@ -82,13 +81,7 @@ function calculateOutputDimensions(
   const targetRatio = parseRatio(outputRatio);
 
   if (targetRatio === null) {
-    // Auto mode: include padding if set, otherwise raw screenshot size
-    if (padding > 0) {
-      return {
-        totalWidth: screenshotWidth + padding * 2,
-        totalHeight: screenshotHeight + padding * 2
-      };
-    }
+    // Auto mode: output size same as screenshot dimensions
     return { totalWidth: screenshotWidth, totalHeight: screenshotHeight };
   }
 
@@ -139,79 +132,11 @@ function constrainToAspectRatio(area: CropArea, ratio: CropAspectRatio): CropAre
   }
 }
 
-// Helper to copy rendered canvas to clipboard (with all editor settings applied)
-async function copyRenderedCanvasToClipboard(
-  stageRef: React.RefObject<Konva.Stage | null>,
-  screenshot: CaptureResult,
-  padding: number,
-  outputRatio: OutputRatio
-): Promise<boolean> {
-  const stage = stageRef.current;
-  if (!stage) return false;
-
-  try {
-    // Calculate the actual output dimensions
-    const { totalWidth, totalHeight } = calculateOutputDimensions(
-      screenshot.width,
-      screenshot.height,
-      padding,
-      outputRatio
-    );
-
-    // Save current stage properties
-    const oldScaleX = stage.scaleX();
-    const oldScaleY = stage.scaleY();
-    const oldX = stage.x();
-    const oldY = stage.y();
-
-    // Reset stage transform for accurate export at 1:1 scale
-    stage.scaleX(1);
-    stage.scaleY(1);
-    stage.x(0);
-    stage.y(0);
-
-    // Export only the canvas content area
-    const canvas = stage.toCanvas({
-      pixelRatio: 1,
-      x: 0,
-      y: 0,
-      width: totalWidth,
-      height: totalHeight,
-    });
-
-    // Restore stage properties
-    stage.scaleX(oldScaleX);
-    stage.scaleY(oldScaleY);
-    stage.x(oldX);
-    stage.y(oldY);
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/png');
-    });
-
-    if (!blob) return false;
-
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'image/png': blob,
-      }),
-    ]);
-    return true;
-  } catch (error) {
-    console.error('Failed to copy rendered canvas to clipboard:', error);
-    return false;
-  }
-}
-
 function App() {
   const stageRef = useRef<Konva.Stage>(null);
   const [screenshot, setScreenshot] = useState<CaptureResult | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
-  const [showRegionSelector, setShowRegionSelector] = useState(false);
-  const [displayBounds, setDisplayBounds] = useState({ width: 1920, height: 1080 });
-  const [regionScreenshot, setRegionScreenshot] = useState<string | undefined>();
-  const [regionScaleRatio, setRegionScaleRatio] = useState(1);
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
 
   // Editor settings (loaded from localStorage with lazy initialization)
@@ -246,6 +171,9 @@ function App() {
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
+
+  // Auto-copy state: tracks when a fresh capture needs auto-copy after canvas renders
+  const [pendingAutoCopy, setPendingAutoCopy] = useState(false);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -288,19 +216,13 @@ function App() {
     }
 
     if (mode === 'region') {
-      // Prepare region capture - this will hide window, take screenshot, and make window fullscreen
+      // Native overlay handles region capture - just trigger it
       try {
-        const data = await PrepareRegionCapture();
-        if (!data.screenshot) {
-          throw new Error('No screenshot data received');
-        }
-        setDisplayBounds({ width: data.width, height: data.height });
-        setRegionScreenshot(data.screenshot.data);
-        setRegionScaleRatio(data.scaleRatio || 1);
-        setShowRegionSelector(true);
+        await PrepareRegionCapture();
+        // Selection result comes via 'region:selected' event
       } catch (error) {
-        console.error('Failed to prepare region capture:', error);
-        setStatusMessage('Failed to prepare region capture');
+        console.error('Failed to start region capture:', error);
+        setStatusMessage('Failed to start region capture');
         setTimeout(() => setStatusMessage(undefined), 3000);
       }
       return;
@@ -325,22 +247,8 @@ function App() {
       setActiveTool('select');
       setStatusMessage(undefined);
 
-      // Auto-copy rendered canvas to clipboard if enabled
-      // Delay to ensure Konva stage has rendered with editor settings applied
-      setTimeout(async () => {
-        try {
-          const cfg = await GetConfig();
-          if (cfg.export?.autoCopyToClipboard) {
-            const success = await copyRenderedCanvasToClipboard(stageRef, result, padding, outputRatio);
-            if (success) {
-              setStatusMessage('Copied to clipboard!');
-              setTimeout(() => setStatusMessage(undefined), 2000);
-            }
-          }
-        } catch (err) {
-          console.error('Auto-copy failed:', err);
-        }
-      }, 300);
+      // Trigger auto-copy of styled canvas (handled by useEffect)
+      setPendingAutoCopy(true);
     } catch (error) {
       console.error('Capture failed:', error);
       setStatusMessage('Capture failed');
@@ -348,7 +256,7 @@ function App() {
     }
 
     setIsCapturing(false);
-  }, [padding, outputRatio]);
+  }, []);
 
   const handleWindowSelect = async (window: WindowInfo) => {
     setShowWindowPicker(false);
@@ -364,22 +272,8 @@ function App() {
       setActiveTool('select');
       setStatusMessage(undefined);
 
-      // Auto-copy rendered canvas to clipboard if enabled
-      // Delay to ensure Konva stage has rendered with editor settings applied
-      setTimeout(async () => {
-        try {
-          const cfg = await GetConfig();
-          if (cfg.export?.autoCopyToClipboard) {
-            const success = await copyRenderedCanvasToClipboard(stageRef, result, padding, outputRatio);
-            if (success) {
-              setStatusMessage('Copied to clipboard!');
-              setTimeout(() => setStatusMessage(undefined), 2000);
-            }
-          }
-        } catch (err) {
-          console.error('Auto-copy failed:', err);
-        }
-      }, 300);
+      // Trigger auto-copy of styled canvas (handled by useEffect)
+      setPendingAutoCopy(true);
     } catch (error) {
       console.error('Window capture failed:', error);
       setStatusMessage('Capture failed');
@@ -389,99 +283,23 @@ function App() {
     setIsCapturing(false);
   };
 
-  const handleRegionSelect = async (x: number, y: number, width: number, height: number) => {
-    setShowRegionSelector(false);
-    setIsCapturing(true);
-    setStatusMessage('Capturing region...');
+  // Handle native overlay selection result (already cropped by backend)
+  const handleNativeRegionSelect = useCallback((width: number, height: number, screenshotData: string) => {
+    // Set screenshot directly - already cropped by Go backend
+    setScreenshot({ width, height, data: screenshotData });
 
-    try {
-      // Crop the selected region from the fullscreen screenshot (client-side)
-      if (!regionScreenshot) {
-        throw new Error('No screenshot data available');
-      }
+    // Reset annotations for new capture
+    setAnnotations([]);
+    setSelectedAnnotationId(null);
+    setActiveTool('select');
+    setStatusMessage(undefined);
 
-      // Create an image from the fullscreen screenshot
-      const img = new Image();
-      img.onload = async () => {
-        // Apply DPI scale ratio to get actual pixel coordinates in the screenshot
-        const scale = regionScaleRatio;
-        const scaledX = Math.round(x * scale);
-        const scaledY = Math.round(y * scale);
-        const scaledWidth = Math.round(width * scale);
-        const scaledHeight = Math.round(height * scale);
+    // Restore window to normal state
+    FinishRegionCapture();
 
-        const canvas = document.createElement('canvas');
-        canvas.width = scaledWidth;
-        canvas.height = scaledHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          setStatusMessage('Failed to create canvas context');
-          setIsCapturing(false);
-          return;
-        }
-
-        // Crop the selected region from the high-DPI screenshot
-        ctx.drawImage(img, scaledX, scaledY, scaledWidth, scaledHeight, 0, 0, scaledWidth, scaledHeight);
-
-        // Get the cropped image as base64
-        const croppedData = canvas.toDataURL('image/png').split(',')[1];
-        setScreenshot({
-          width: scaledWidth,
-          height: scaledHeight,
-          data: croppedData,
-        });
-        // Reset annotations for new capture
-        setAnnotations([]);
-        setSelectedAnnotationId(null);
-        setActiveTool('select');
-        setStatusMessage(undefined);
-        setIsCapturing(false);
-
-        // Restore window to normal state
-        FinishRegionCapture();
-        setRegionScreenshot(undefined);
-        setRegionScaleRatio(1);
-
-        // Auto-copy rendered canvas to clipboard if enabled
-        // Delay to ensure Konva stage has rendered with editor settings applied
-        const capturedResult: CaptureResult = {
-          width: scaledWidth,
-          height: scaledHeight,
-          data: croppedData,
-        };
-        setTimeout(async () => {
-          try {
-            const cfg = await GetConfig();
-            if (cfg.export?.autoCopyToClipboard) {
-              const success = await copyRenderedCanvasToClipboard(stageRef, capturedResult, padding, outputRatio);
-              if (success) {
-                setStatusMessage('Copied to clipboard!');
-                setTimeout(() => setStatusMessage(undefined), 2000);
-              }
-            }
-          } catch (err) {
-            console.error('Auto-copy failed:', err);
-          }
-        }, 300);
-      };
-      img.onerror = () => {
-        setStatusMessage('Failed to load screenshot');
-        setIsCapturing(false);
-        FinishRegionCapture();
-        setRegionScreenshot(undefined);
-        setRegionScaleRatio(1);
-      };
-      img.src = `data:image/png;base64,${regionScreenshot}`;
-    } catch (error) {
-      console.error('Region capture failed:', error);
-      setStatusMessage('Capture failed');
-      setTimeout(() => setStatusMessage(undefined), 3000);
-      setIsCapturing(false);
-      FinishRegionCapture();
-      setRegionScreenshot(undefined);
-      setRegionScaleRatio(1);
-    }
-  };
+    // Trigger auto-copy of styled canvas (handled by useEffect)
+    setPendingAutoCopy(true);
+  }, []);
 
   const handleClear = () => {
     setScreenshot(null);
@@ -535,25 +353,52 @@ function App() {
     }
   }, []);
 
-  // Listen for global hotkey events from backend
+  const handleClipboardCapture = useCallback(async () => {
+    try {
+      const result = await GetClipboardImage();
+
+      if (!result) {
+        setStatusMessage('No image in clipboard');
+        setTimeout(() => setStatusMessage(undefined), 3000);
+        return;
+      }
+
+      setScreenshot(result as CaptureResult);
+      // Reset annotations and crop state for clipboard image
+      setAnnotations([]);
+      setSelectedAnnotationId(null);
+      setActiveTool('select');
+      setCropState({
+        originalImage: null,
+        croppedImage: null,
+        originalAnnotations: [],
+        lastCropArea: null,
+        isCropApplied: false,
+      });
+      setCropArea(null);
+      setCropMode(false);
+      setStatusMessage('Image pasted from clipboard');
+      setTimeout(() => setStatusMessage(undefined), 2000);
+    } catch (error) {
+      console.error('Clipboard paste failed:', error);
+      setStatusMessage('No image in clipboard');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+    }
+  }, []);
+
+  // Listen for global hotkey events and native overlay events from backend
   useEffect(() => {
     const handleFullscreen = () => {
       handleCapture('fullscreen');
     };
     const handleRegion = async () => {
-      // Prepare region capture - this will hide window, take screenshot, and make window fullscreen
+      // Native overlay handles region capture - just trigger it
       try {
-        const data = await PrepareRegionCapture();
-        if (!data.screenshot) {
-          throw new Error('No screenshot data received');
-        }
-        setDisplayBounds({ width: data.width, height: data.height });
-        setRegionScreenshot(data.screenshot.data);
-        setRegionScaleRatio(data.scaleRatio || 1);
-        setShowRegionSelector(true);
+        await PrepareRegionCapture();
+        // Selection result comes via 'region:selected' event
       } catch (error) {
-        console.error('Failed to prepare region capture:', error);
-        setStatusMessage('Failed to prepare region capture');
+        console.error('Failed to start region capture:', error);
+        setStatusMessage('Failed to start region capture');
         setTimeout(() => setStatusMessage(undefined), 3000);
       }
     };
@@ -561,18 +406,27 @@ function App() {
       setShowWindowPicker(true);
     };
 
+    // Handle native overlay selection result (already cropped)
+    const handleRegionSelected = (data: {
+      width: number;
+      height: number;
+      screenshot: string;
+    }) => {
+      handleNativeRegionSelect(data.width, data.height, data.screenshot);
+    };
+
     EventsOn('hotkey:fullscreen', handleFullscreen);
     EventsOn('hotkey:region', handleRegion);
     EventsOn('hotkey:window', handleWindow);
-    EventsOn('app:quit', Quit);
+    EventsOn('region:selected', handleRegionSelected);
 
     return () => {
       EventsOff('hotkey:fullscreen');
       EventsOff('hotkey:region');
       EventsOff('hotkey:window');
-      EventsOff('app:quit');
+      EventsOff('region:selected');
     };
-  }, [handleCapture]);
+  }, [handleCapture, handleNativeRegionSelect]);
 
   // Handle minimize to tray
   const handleMinimizeToTray = useCallback(() => {
@@ -1008,15 +862,10 @@ function App() {
     setTimeout(() => setStatusMessage(undefined), 3000);
   }, [getCanvasDataUrl]);
 
-  const handleCopyToClipboard = useCallback(async () => {
+  // Helper to copy styled canvas to clipboard (used by auto-copy and manual copy)
+  const copyStyledCanvasToClipboard = useCallback(async (): Promise<boolean> => {
     const stage = stageRef.current;
-    if (!stage || !screenshot) {
-      setStatusMessage('Copy failed: No canvas available');
-      return;
-    }
-
-    setIsExporting(true);
-    setStatusMessage('Copying to clipboard...');
+    if (!stage || !screenshot) return false;
 
     try {
       // Calculate the actual output dimensions
@@ -1058,25 +907,83 @@ function App() {
         canvas.toBlob(resolve, 'image/png');
       });
 
-      if (!blob) {
-        throw new Error('Failed to create image blob');
-      }
+      if (!blob) return false;
 
       await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob,
-        }),
+        new ClipboardItem({ 'image/png': blob }),
       ]);
-
-      setStatusMessage('Copied to clipboard!');
+      return true;
     } catch (error) {
-      console.error('Copy to clipboard failed:', error);
+      console.error('Failed to copy styled canvas:', error);
+      return false;
+    }
+  }, [screenshot, padding, outputRatio]);
+
+  // Manual copy to clipboard handler (uses helper)
+  const handleCopyToClipboard = useCallback(async () => {
+    if (!stageRef.current || !screenshot) {
+      setStatusMessage('Copy failed: No canvas available');
+      return;
+    }
+
+    setIsExporting(true);
+    setStatusMessage('Copying to clipboard...');
+
+    const success = await copyStyledCanvasToClipboard();
+
+    if (success) {
+      setStatusMessage('Copied to clipboard!');
+    } else {
       setStatusMessage('Copy to clipboard failed');
     }
 
     setIsExporting(false);
     setTimeout(() => setStatusMessage(undefined), 2000);
-  }, [screenshot, padding, outputRatio]);
+  }, [screenshot, copyStyledCanvasToClipboard]);
+
+  // Auto-copy styled canvas to clipboard after capture completes
+  useEffect(() => {
+    if (!pendingAutoCopy || !screenshot) return;
+
+    let cancelled = false;
+
+    const performAutoCopy = async () => {
+      try {
+        const cfg = await GetConfig();
+        if (cancelled) return;
+
+        if (!cfg.export?.autoCopyToClipboard) {
+          setPendingAutoCopy(false);
+          return;
+        }
+
+        // Wait for canvas to render with new screenshot
+        // 300ms accounts for: React re-render + Konva image load
+        await new Promise(resolve => setTimeout(resolve, 300));
+        if (cancelled) return;
+
+        const success = await copyStyledCanvasToClipboard();
+        if (cancelled) return;
+
+        if (success) {
+          setStatusMessage('Copied to clipboard!');
+          setTimeout(() => setStatusMessage(undefined), 2000);
+        }
+      } catch (err) {
+        console.error('Auto-copy failed:', err);
+      }
+
+      if (!cancelled) {
+        setPendingAutoCopy(false);
+      }
+    };
+
+    performAutoCopy();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingAutoCopy, screenshot, copyStyledCanvasToClipboard]);
 
   // Keyboard shortcuts for export and import
   useEffect(() => {
@@ -1117,6 +1024,7 @@ function App() {
         onMinimize={handleMinimizeToTray}
         onOpenSettings={() => setShowSettings(true)}
         onImportImage={handleImportImage}
+        onClipboardCapture={handleClipboardCapture}
       />
 
       {screenshot && !cropMode && (
@@ -1217,20 +1125,6 @@ function App() {
         isOpen={showWindowPicker}
         onClose={() => setShowWindowPicker(false)}
         onSelect={handleWindowSelect}
-      />
-
-      <RegionSelector
-        isOpen={showRegionSelector}
-        onClose={() => {
-          setShowRegionSelector(false);
-          FinishRegionCapture();
-          setRegionScreenshot(undefined);
-          setRegionScaleRatio(1);
-        }}
-        onSelect={handleRegionSelect}
-        screenWidth={displayBounds.width}
-        screenHeight={displayBounds.height}
-        screenshotData={regionScreenshot}
       />
 
       <SettingsModal
