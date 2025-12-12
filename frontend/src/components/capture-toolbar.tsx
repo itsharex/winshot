@@ -1,5 +1,5 @@
 import { CaptureMode } from '../types';
-import { Monitor, Scan, AppWindow, Settings, ChevronDown, FolderOpen } from 'lucide-react';
+import { Monitor, Scan, AppWindow, Settings, ChevronDown, FolderOpen, Clipboard } from 'lucide-react';
 
 interface CaptureToolbarProps {
   onCapture: (mode: CaptureMode) => void;
@@ -9,9 +9,10 @@ interface CaptureToolbarProps {
   onMinimize?: () => void;
   onOpenSettings?: () => void;
   onImportImage?: () => void;
+  onClipboardCapture?: () => void;
 }
 
-export function CaptureToolbar({ onCapture, isCapturing, hasScreenshot, onClear, onMinimize, onOpenSettings, onImportImage }: CaptureToolbarProps) {
+export function CaptureToolbar({ onCapture, isCapturing, hasScreenshot, onClear, onMinimize, onOpenSettings, onImportImage, onClipboardCapture }: CaptureToolbarProps) {
   return (
     <div className="flex items-center gap-4 px-4 py-3 glass">
       <div className="flex gap-2">
@@ -59,6 +60,23 @@ export function CaptureToolbar({ onCapture, isCapturing, hasScreenshot, onClear,
           <AppWindow className="w-4 h-4" />
           Window
         </button>
+
+        {/* Clipboard - Green/emerald gradient */}
+        {onClipboardCapture && (
+          <button
+            onClick={onClipboardCapture}
+            disabled={isCapturing}
+            className="px-4 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-2
+                       bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400
+                       disabled:from-slate-600 disabled:to-slate-700 disabled:opacity-50
+                       text-white font-medium shadow-lg shadow-green-500/25 hover:shadow-green-500/40
+                       hover:-translate-y-0.5 active:translate-y-0"
+            title="Paste image from clipboard (Ctrl+V)"
+          >
+            <Clipboard className="w-4 h-4" />
+            Clipboard
+          </button>
+        )}
 
         {/* Import - Amber/orange gradient */}
         {onImportImage && (

@@ -30,6 +30,10 @@ export function GetBackgroundImages() {
   return window['go']['main']['App']['GetBackgroundImages']();
 }
 
+export function GetClipboardImage() {
+  return window['go']['main']['App']['GetClipboardImage']();
+}
+
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }
@@ -44,6 +48,10 @@ export function GetDisplayCount() {
 
 export function GetHotkeyConfig() {
   return window['go']['main']['App']['GetHotkeyConfig']();
+}
+
+export function GetVirtualScreenBounds() {
+  return window['go']['main']['App']['GetVirtualScreenBounds']();
 }
 
 export function GetWindowInfo(arg1) {
