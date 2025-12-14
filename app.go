@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
@@ -18,22 +19,28 @@ import (
 	"golang.org/x/image/webp"
 	"winshot/internal/config"
 	"winshot/internal/hotkeys"
+	"winshot/internal/overlay"
 	"winshot/internal/screenshot"
 	"winshot/internal/tray"
+	"winshot/internal/updater"
 	winEnum "winshot/internal/windows"
 )
 
 // App struct
 type App struct {
-	ctx           context.Context
-	hotkeyManager *hotkeys.HotkeyManager
+	ctx              context.Context
+	hotkeyManager    *hotkeys.HotkeyManager
+	overlayManager   *overlay.Manager
 	trayIcon         *tray.TrayIcon
 	config           *config.Config
 	lastWidth        int
 	lastHeight       int
-	preCaptureWidth  int // Window size before capture (protected from resize events)
+	preCaptureWidth  int  // Window size before capture (protected from resize events)
 	preCaptureHeight int
+	preCaptureX      int  // Window X position before capture
+	preCaptureY      int  // Window Y position before capture
 	isCapturing      bool // Flag to prevent resize events during capture
+	isWindowHidden   bool // Track window visibility state
 }
 
 // NewApp creates a new App application struct
@@ -60,11 +67,19 @@ func (a *App) startup(ctx context.Context) {
 	a.registerHotkeysFromConfig()
 	a.hotkeyManager.Start()
 
+	// Initialize overlay manager for native region selection
+	a.overlayManager = overlay.NewManager()
+	if err := a.overlayManager.Start(); err != nil {
+		// Log warning but continue - will fall back to React overlay
+		println("Warning: failed to start overlay manager:", err.Error())
+	}
+
 	// Initialize system tray
 	a.trayIcon = tray.NewTrayIcon("WinShot - Screenshot Tool")
 	a.trayIcon.SetCallback(a.onTrayMenu)
 	a.trayIcon.SetOnShow(func() {
 		runtime.WindowShow(a.ctx)
+		a.isWindowHidden = false
 		runtime.WindowSetAlwaysOnTop(a.ctx, true)
 		runtime.WindowSetAlwaysOnTop(a.ctx, false)
 	})
@@ -73,6 +88,15 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize window size tracking with config values
 	a.lastWidth = cfg.Window.Width
 	a.lastHeight = cfg.Window.Height
+
+	// Handle "start minimized to tray" setting
+	if cfg.Startup.MinimizeToTray {
+		// Use goroutine with delay to let window fully initialize first
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			runtime.WindowHide(a.ctx)
+		}()
+	}
 }
 
 // shutdown is called when the app is closing
@@ -88,6 +112,9 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.hotkeyManager != nil {
 		a.hotkeyManager.Stop()
 		a.hotkeyManager.UnregisterAll()
+	}
+	if a.overlayManager != nil {
+		a.overlayManager.Stop()
 	}
 	if a.trayIcon != nil {
 		a.trayIcon.Stop()
@@ -116,7 +143,16 @@ func (a *App) onTrayMenu(menuID int) {
 	case tray.MenuWindow:
 		runtime.EventsEmit(a.ctx, "hotkey:window")
 	case tray.MenuQuit:
-		runtime.Quit(a.ctx)
+		// Quit the application - use goroutine to avoid blocking tray menu
+		go func() {
+			// First try graceful shutdown via runtime.Quit
+			// This may not work reliably on Windows from a goroutine
+			runtime.Quit(a.ctx)
+
+			// Fallback: force exit after a short delay if Quit didn't work
+			time.Sleep(500 * time.Millisecond)
+			os.Exit(0)
+		}()
 	}
 }
 
@@ -135,6 +171,7 @@ func (a *App) UpdateWindowSize(width, height int) {
 // MinimizeToTray hides the window (minimize to tray)
 func (a *App) MinimizeToTray() {
 	runtime.WindowHide(a.ctx)
+	a.isWindowHidden = true
 }
 
 // OnBeforeClose is called when the window close button is clicked
@@ -143,9 +180,18 @@ func (a *App) OnBeforeClose(ctx context.Context) bool {
 	if a.config != nil && a.config.Startup.CloseToTray {
 		// Hide window instead of closing
 		runtime.WindowHide(ctx)
+		a.isWindowHidden = true
 		return true // Prevent default close
 	}
 	return false // Allow normal close
+}
+
+// VirtualScreenBounds represents the combined bounds of all monitors
+type VirtualScreenBounds struct {
+	X      int `json:"x"`      // Can be negative (monitor left of primary)
+	Y      int `json:"y"`      // Can be negative (monitor above primary)
+	Width  int `json:"width"`
+	Height int `json:"height"`
 }
 
 // RegionCaptureData holds the fullscreen screenshot and display info for region selection
@@ -161,10 +207,13 @@ type RegionCaptureData struct {
 	DisplayIndex int                       `json:"displayIndex"` // Index of the captured display
 }
 
-// PrepareRegionCapture prepares for region selection by capturing the active monitor and setting up overlay
+// PrepareRegionCapture prepares for region selection using native Win32 overlay
 func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 	// Set capturing flag to prevent resize events from overwriting saved size
 	a.isCapturing = true
+
+	// Save current window position before hiding
+	a.preCaptureX, a.preCaptureY = runtime.WindowGetPosition(a.ctx)
 
 	// Save current window size before hiding (protected from resize events)
 	width, height := runtime.WindowGetSize(a.ctx)
@@ -181,131 +230,113 @@ func (a *App) PrepareRegionCapture() (*RegionCaptureData, error) {
 		a.preCaptureHeight = 800
 	}
 
-	// Hide the window first so it's not in the screenshot
-	runtime.WindowHide(a.ctx)
+	// Only hide and wait if window is currently visible
+	if !a.isWindowHidden {
+		runtime.WindowHide(a.ctx)
+		a.isWindowHidden = true
+		// Wait for window to fully hide (250ms for DWM compositor)
+		time.Sleep(250 * time.Millisecond)
+	}
 
-	// Wait for window to fully hide (350ms needed for Windows DWM compositor)
-	time.Sleep(350 * time.Millisecond)
+	// Get the virtual screen bounds first
+	screenX, screenY, virtualWidth, virtualHeight := screenshot.GetVirtualScreenBounds()
 
-	// Capture the display where cursor is located (at physical/native resolution)
-	result, displayIndex, err := screenshot.CaptureActiveDisplay()
+	// Capture raw RGBA (faster - no PNG encode)
+	rgbaImg, err := screenshot.CaptureVirtualScreenRaw()
 	if err != nil {
-		// Show window again on error
 		runtime.WindowShow(a.ctx)
+		a.isCapturing = false
 		return nil, err
 	}
 
-	// Get the physical bounds of the captured display
-	displayBounds := screenshot.GetDisplayBounds(displayIndex)
-	screenX := displayBounds.Min.X
-	screenY := displayBounds.Min.Y
-
-	// Get logical screen info from Wails runtime
-	// Wails ScreenGetAll returns logical (DPI-scaled) dimensions
-	screens, _ := runtime.ScreenGetAll(a.ctx)
-
-	// Calculate logical dimensions based on physical screenshot and DPI
-	// We use the screenshot dimensions directly since they represent the actual captured area
-	logicalWidth := result.Width
-	logicalHeight := result.Height
-	scaleRatio := 1.0
-
-	// Try to find matching screen from Wails to get logical dimensions
-	// This helps handle DPI scaling correctly
-	if len(screens) > 0 {
-		// Find screen that best matches our captured display
-		var matchedScreen *runtime.Screen
-		for i := range screens {
-			s := &screens[i]
-			// Check if this screen's size roughly matches our physical capture
-			// (accounting for potential DPI differences)
-			if s.Size.Width > 0 && s.Size.Height > 0 {
-				// For now, use the screen at the matching index if available
-				if i == displayIndex && i < len(screens) {
-					matchedScreen = s
-					break
-				}
-			}
-		}
-
-		// If we found a match, use its logical dimensions
-		if matchedScreen != nil {
-			logicalWidth = matchedScreen.Size.Width
-			logicalHeight = matchedScreen.Size.Height
-			scaleRatio = float64(result.Width) / float64(logicalWidth)
-			if scaleRatio < 1.0 {
-				scaleRatio = 1.0
-			}
-		} else if len(screens) > 0 {
-			// Fallback: estimate scale from first screen's DPI
-			firstScreen := screens[0]
-			if firstScreen.Size.Width > 0 {
-				estimatedScale := float64(displayBounds.Dx()) / float64(firstScreen.Size.Width)
-				if estimatedScale > 1.0 && estimatedScale < 4.0 {
-					scaleRatio = estimatedScale
-					logicalWidth = int(float64(result.Width) / scaleRatio)
-					logicalHeight = int(float64(result.Height) / scaleRatio)
-				}
-			}
-		}
+	// Calculate scale ratio between physical screenshot and logical window size
+	scaleRatio := float64(rgbaImg.Bounds().Dx()) / float64(virtualWidth)
+	if scaleRatio < 1.0 {
+		scaleRatio = 1.0
 	}
 
-	// Position window at the captured display's origin
-	runtime.WindowSetPosition(a.ctx, screenX, screenY)
+	// Show native overlay and get result channel
+	bounds := image.Rect(screenX, screenY, screenX+virtualWidth, screenY+virtualHeight)
+	resultCh := a.overlayManager.Show(rgbaImg, bounds, scaleRatio)
 
-	// Disable min size constraint temporarily
-	runtime.WindowSetMinSize(a.ctx, 0, 0)
+	// Wait for selection result in goroutine
+	go func() {
+		selResult := <-resultCh
+		if selResult.Cancelled {
+			// User cancelled - just show window
+			runtime.WindowShow(a.ctx)
+			a.isWindowHidden = false
+			a.isCapturing = false
+			return
+		}
 
-	// Set window size to match the logical display dimensions
-	runtime.WindowSetSize(a.ctx, logicalWidth, logicalHeight)
+		// Scale coordinates to physical pixels
+		scaledX := int(float64(selResult.X) * scaleRatio)
+		scaledY := int(float64(selResult.Y) * scaleRatio)
+		scaledW := int(float64(selResult.Width) * scaleRatio)
+		scaledH := int(float64(selResult.Height) * scaleRatio)
 
-	// Make window always on top
-	runtime.WindowSetAlwaysOnTop(a.ctx, true)
+		// Crop to selected region before encoding (much faster - smaller image)
+		croppedImg := rgbaImg.SubImage(image.Rect(scaledX, scaledY, scaledX+scaledW, scaledY+scaledH))
 
-	// Show the window
-	runtime.WindowShow(a.ctx)
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, croppedImg); err != nil {
+			runtime.WindowShow(a.ctx)
+			a.isWindowHidden = false
+			a.isCapturing = false
+			return
+		}
 
+		// Emit cropped image directly - no need for frontend to crop again
+		runtime.EventsEmit(a.ctx, "region:selected", map[string]interface{}{
+			"width":      scaledW,
+			"height":     scaledH,
+			"screenshot": base64.StdEncoding.EncodeToString(buf.Bytes()),
+		})
+	}()
+
+	// Return minimal data (actual selection comes via event)
 	return &RegionCaptureData{
-		Screenshot:   result,
+		Screenshot:   nil, // Not needed - selection via event
 		ScreenX:      screenX,
 		ScreenY:      screenY,
-		Width:        logicalWidth,
-		Height:       logicalHeight,
+		Width:        virtualWidth,
+		Height:       virtualHeight,
 		ScaleRatio:   scaleRatio,
-		PhysicalW:    result.Width,
-		PhysicalH:    result.Height,
-		DisplayIndex: displayIndex,
+		PhysicalW:    rgbaImg.Bounds().Dx(),
+		PhysicalH:    rgbaImg.Bounds().Dy(),
+		DisplayIndex: 0,
 	}, nil
+}
+
+// imageToRGBA converts an image.Image to *image.RGBA
+func imageToRGBA(img image.Image) *image.RGBA {
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba
+	}
+	bounds := img.Bounds()
+	rgba := image.NewRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			rgba.Set(x, y, img.At(x, y))
+		}
+	}
+	return rgba
 }
 
 // FinishRegionCapture restores the window to normal state after region selection
 func (a *App) FinishRegionCapture() {
-	// Remove always on top
-	runtime.WindowSetAlwaysOnTop(a.ctx, false)
-
-	// Restore min size constraint
-	runtime.WindowSetMinSize(a.ctx, 800, 600)
-
-	// Restore window to the size it was before capture (protected value)
-	width := a.preCaptureWidth
-	height := a.preCaptureHeight
-	if width < 800 || height < 600 {
-		// Fallback to defaults
-		width = 1200
-		height = 800
-	}
-	runtime.WindowSetSize(a.ctx, width, height)
-
-	// Clear capturing flag to allow resize tracking again
+	// Simply show window and clear capturing flag
+	// Native overlay doesn't modify main window, so just show it
+	runtime.WindowShow(a.ctx)
+	a.isWindowHidden = false
 	a.isCapturing = false
-
-	// Center the window
-	runtime.WindowCenter(a.ctx)
 }
 
 // ShowWindow shows the main window
 func (a *App) ShowWindow() {
 	runtime.WindowShow(a.ctx)
+	a.isWindowHidden = false
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.WindowSetAlwaysOnTop(a.ctx, false)
 }
@@ -346,6 +377,12 @@ func (a *App) GetDisplayCount() int {
 // GetActiveDisplayIndex returns the index of the display where the cursor is located
 func (a *App) GetActiveDisplayIndex() int {
 	return screenshot.GetMonitorAtCursor()
+}
+
+// GetVirtualScreenBounds returns the combined bounds of all monitors (virtual desktop)
+func (a *App) GetVirtualScreenBounds() VirtualScreenBounds {
+	x, y, w, h := screenshot.GetVirtualScreenBounds()
+	return VirtualScreenBounds{X: x, Y: y, Width: w, Height: h}
 }
 
 // DisplayBounds represents the bounds of a display
@@ -441,22 +478,25 @@ func (a *App) SaveImage(imageData string, format string) SaveImageResult {
 	return SaveImageResult{Success: true, FilePath: filePath}
 }
 
-// QuickSave saves a base64 encoded image to a predefined directory
+// QuickSave saves a base64 encoded image to the configured directory
 func (a *App) QuickSave(imageData string, format string) SaveImageResult {
-	// Get user's Pictures folder
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return SaveImageResult{Success: false, Error: "Failed to get home directory: " + err.Error()}
+	// Get save directory from config (fallback to default)
+	saveDir := a.config.QuickSave.Folder
+	if saveDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return SaveImageResult{Success: false, Error: "Failed to get home directory: " + err.Error()}
+		}
+		saveDir = filepath.Join(homeDir, "Pictures", "WinShot")
 	}
 
-	// Create WinShot folder in Pictures
-	saveDir := filepath.Join(homeDir, "Pictures", "WinShot")
-	err = os.MkdirAll(saveDir, 0755)
+	// Create save directory if it doesn't exist
+	err := os.MkdirAll(saveDir, 0755)
 	if err != nil {
 		return SaveImageResult{Success: false, Error: "Failed to create save directory: " + err.Error()}
 	}
 
-	// Generate filename with timestamp
+	// Determine file extension
 	var ext string
 	switch strings.ToLower(format) {
 	case "jpeg", "jpg":
@@ -465,8 +505,47 @@ func (a *App) QuickSave(imageData string, format string) SaveImageResult {
 		ext = ".png"
 	}
 
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := "winshot_" + timestamp + ext
+	// Generate filename based on configured pattern
+	var filename string
+	now := time.Now()
+	pattern := a.config.QuickSave.Pattern
+	if pattern == "" {
+		pattern = "timestamp"
+	}
+
+	switch pattern {
+	case "date":
+		// Date only: winshot_2024-01-15.png
+		filename = "winshot_" + now.Format("2006-01-02") + ext
+		// Avoid overwriting: append counter if file exists
+		filePath := filepath.Join(saveDir, filename)
+		if _, err := os.Stat(filePath); err == nil {
+			counter := 1
+			for {
+				filename = "winshot_" + now.Format("2006-01-02") + "_" + fmt.Sprintf("%d", counter) + ext
+				filePath = filepath.Join(saveDir, filename)
+				if _, err := os.Stat(filePath); os.IsNotExist(err) {
+					break
+				}
+				counter++
+			}
+		}
+	case "increment":
+		// Incremental: winshot_001.png, winshot_002.png
+		counter := 1
+		for {
+			filename = fmt.Sprintf("winshot_%03d%s", counter, ext)
+			filePath := filepath.Join(saveDir, filename)
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				break
+			}
+			counter++
+		}
+	default: // "timestamp"
+		// Full timestamp: winshot_2024-01-15_14-30-45.png
+		filename = "winshot_" + now.Format("2006-01-02_15-04-05") + ext
+	}
+
 	filePath := filepath.Join(saveDir, filename)
 
 	// Decode and save
@@ -644,4 +723,30 @@ func (a *App) OpenImage() (*screenshot.CaptureResult, error) {
 		Height: bounds.Dy(),
 		Data:   base64.StdEncoding.EncodeToString(buf.Bytes()),
 	}, nil
+}
+
+// GetClipboardImage reads an image from the Windows clipboard
+func (a *App) GetClipboardImage() (*screenshot.CaptureResult, error) {
+	return screenshot.GetClipboardImage()
+}
+
+// CheckForUpdate checks GitHub for a newer version
+func (a *App) CheckForUpdate(currentVersion string) (*updater.UpdateInfo, error) {
+	return updater.CheckForUpdate(currentVersion)
+}
+
+// OpenURL opens a URL in the default browser
+func (a *App) OpenURL(url string) {
+	runtime.BrowserOpenURL(a.ctx, url)
+}
+
+// SetSkippedVersion sets a version to skip for update notifications
+func (a *App) SetSkippedVersion(version string) error {
+	a.config.Update.SkippedVersion = version
+	return a.config.Save()
+}
+
+// GetSkippedVersion returns the version that user chose to skip
+func (a *App) GetSkippedVersion() string {
+	return a.config.Update.SkippedVersion
 }

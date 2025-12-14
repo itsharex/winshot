@@ -1,9 +1,48 @@
 import { useRef, useState, useEffect } from 'react';
 import { OutputRatio } from '../types';
 import { GetBackgroundImages, SaveBackgroundImages } from '../../wailsjs/go/main/App';
-import { X, ImagePlus } from 'lucide-react';
+import { X, ImagePlus, Eye, EyeOff } from 'lucide-react';
 
 const MAX_BACKGROUND_IMAGES = 8;
+const MAX_BG_IMAGE_SIZE = 2048;  // Max dimension
+const BG_IMAGE_QUALITY = 0.85;   // JPEG quality
+const LEGACY_STORAGE_KEY = 'winshot-background-images';  // Old localStorage key for migration
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      let { width, height } = img;
+      if (width > MAX_BG_IMAGE_SIZE || height > MAX_BG_IMAGE_SIZE) {
+        const ratio = Math.min(MAX_BG_IMAGE_SIZE / width, MAX_BG_IMAGE_SIZE / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', BG_IMAGE_QUALITY));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+
+    img.src = url;
+  });
+}
 
 // Output ratio presets with display labels
 const OUTPUT_RATIO_PRESETS: { value: OutputRatio; label: string }[] = [
@@ -24,6 +63,7 @@ interface SettingsPanelProps {
   shadowSize: number;
   backgroundColor: string;
   outputRatio: OutputRatio;
+  showBackground: boolean;
   imageWidth: number;
   imageHeight: number;
   onPaddingChange: (value: number) => void;
@@ -31,6 +71,7 @@ interface SettingsPanelProps {
   onShadowSizeChange: (value: number) => void;
   onBackgroundChange: (value: string) => void;
   onOutputRatioChange: (value: OutputRatio) => void;
+  onShowBackgroundChange: (value: boolean) => void;
 }
 
 const GRADIENT_PRESETS = [
@@ -72,6 +113,7 @@ export function SettingsPanel({
   shadowSize,
   backgroundColor,
   outputRatio,
+  showBackground,
   imageWidth,
   imageHeight,
   onPaddingChange,
@@ -79,43 +121,75 @@ export function SettingsPanel({
   onShadowSizeChange,
   onBackgroundChange,
   onOutputRatioChange,
+  onShowBackgroundChange,
 }: SettingsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
 
-  // Load images from Go backend on mount
+  // Load images from Go backend on mount, with migration from legacy localStorage
   useEffect(() => {
     GetBackgroundImages().then((images) => {
-      if (Array.isArray(images)) {
-        setUploadedImages(images.slice(0, MAX_BACKGROUND_IMAGES));
+      const backendImages = Array.isArray(images) ? images : [];
+
+      // Check for legacy localStorage images to migrate
+      if (backendImages.length === 0) {
+        try {
+          const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
+          if (legacyData) {
+            const legacyImages = JSON.parse(legacyData);
+            if (Array.isArray(legacyImages) && legacyImages.length > 0) {
+              // Migrate legacy images to backend
+              const migratedImages = legacyImages.slice(0, MAX_BACKGROUND_IMAGES);
+              setUploadedImages(migratedImages);
+              SaveBackgroundImages(migratedImages).then(() => {
+                // Clear legacy storage after successful migration
+                localStorage.removeItem(LEGACY_STORAGE_KEY);
+              }).catch(() => {});
+              return;
+            }
+          }
+        } catch {
+          // Invalid legacy data, ignore
+        }
       }
+
+      setUploadedImages(backendImages.slice(0, MAX_BACKGROUND_IMAGES));
     }).catch(() => {
-      // Failed to load, start with empty
+      // Failed to load from backend, try legacy localStorage as fallback
+      try {
+        const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacyData) {
+          const legacyImages = JSON.parse(legacyData);
+          if (Array.isArray(legacyImages)) {
+            setUploadedImages(legacyImages.slice(0, MAX_BACKGROUND_IMAGES));
+          }
+        }
+      } catch {
+        // Start with empty
+      }
     });
   }, []);
 
   // Max padding is 1/3 of the smaller dimension
   const maxPadding = Math.floor(Math.min(imageWidth, imageHeight) / 3);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && uploadedImages.length < MAX_BACKGROUND_IMAGES) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        const newImages = [...uploadedImages, dataUrl];
-        setUploadedImages(newImages);
-        // Persist to Go backend
-        SaveBackgroundImages(newImages).catch(() => {
-          // Silent fail - images still work in current session
-        });
-        onBackgroundChange(`url(${dataUrl})`);
-      };
-      reader.readAsDataURL(file);
-    }
-    // Reset input so same file can be uploaded again
+    if (!file || uploadedImages.length >= MAX_BACKGROUND_IMAGES) return;
+
+    // Reset input first for responsiveness
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+
+    try {
+      const dataUrl = await compressImage(file);
+      const newImages = [...uploadedImages, dataUrl];
+      setUploadedImages(newImages);
+      SaveBackgroundImages(newImages).catch(() => {});
+      onBackgroundChange(`url(${dataUrl})`);
+    } catch (error) {
+      console.error('Failed to process image:', error);
     }
   };
 
@@ -158,7 +232,7 @@ export function SettingsPanel({
       </div>
 
       {/* Corner Radius */}
-      <div className="mb-6">
+      <div className={`mb-6 transition-opacity duration-200 ${!showBackground ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="flex justify-between items-center mb-2">
           <label className="text-sm text-slate-300 font-medium">Corner Radius</label>
           <span className="text-xs text-cyan-400 font-semibold bg-cyan-500/10 px-2 py-0.5 rounded-full">{cornerRadius}px</span>
@@ -190,7 +264,7 @@ export function SettingsPanel({
       </div>
 
       {/* Output Ratio */}
-      <div className="mb-6">
+      <div className={`mb-6 transition-opacity duration-200 ${!showBackground ? 'opacity-50 pointer-events-none' : ''}`}>
         <label className="block text-sm text-slate-300 font-medium mb-3">
           Output Ratio
         </label>
@@ -211,10 +285,38 @@ export function SettingsPanel({
         </div>
       </div>
 
-      {/* Background Gradients */}
+      {/* Background Toggle */}
       <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <label className="text-sm text-slate-300 font-medium">Background</label>
+          <button
+            onClick={() => onShowBackgroundChange(!showBackground)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200
+              ${showBackground
+                ? 'bg-violet-500/20 text-violet-300 hover:bg-violet-500/30'
+                : 'bg-slate-500/20 text-slate-400 hover:bg-slate-500/30'
+              }`}
+            title={showBackground ? 'Hide background' : 'Show background'}
+          >
+            {showBackground ? (
+              <>
+                <Eye className="w-3.5 h-3.5" />
+                <span>Visible</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-3.5 h-3.5" />
+                <span>Hidden</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Background Gradients */}
+      <div className={`mb-6 transition-opacity duration-200 ${!showBackground ? 'opacity-50 pointer-events-none' : ''}`}>
         <label className="block text-sm text-slate-300 font-medium mb-3">
-          Background
+          Gradient Presets
         </label>
         <div className="grid grid-cols-4 gap-2">
           {GRADIENT_PRESETS.map((gradient) => (
@@ -234,7 +336,7 @@ export function SettingsPanel({
       </div>
 
       {/* Custom Color */}
-      <div className="mb-6">
+      <div className={`mb-6 transition-opacity duration-200 ${!showBackground ? 'opacity-50 pointer-events-none' : ''}`}>
         <label className="block text-sm text-slate-300 font-medium mb-3">
           Custom Color
         </label>
@@ -249,7 +351,7 @@ export function SettingsPanel({
       </div>
 
       {/* Image Background */}
-      <div className="mb-6">
+      <div className={`mb-6 transition-opacity duration-200 ${!showBackground ? 'opacity-50 pointer-events-none' : ''}`}>
         <label className="block text-sm text-slate-300 font-medium mb-3">
           Image Background
           <span className="ml-2 text-xs text-slate-500">({uploadedImages.length}/{MAX_BACKGROUND_IMAGES})</span>

@@ -4,6 +4,8 @@ yarn.lock
 pnpm-lock.yaml
 node_modules
 frontend/node_modules
+frontend/package.json.md5
+frontend/dist/
 
 # Build outputs
 out/

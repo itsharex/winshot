@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useUndoRedo } from './hooks/use-undo-redo';
 import Konva from 'konva';
 import { TitleBar } from './components/title-bar';
 import { CaptureToolbar } from './components/capture-toolbar';
 import { WindowPicker } from './components/window-picker';
-import { RegionSelector } from './components/region-selector';
 import { EditorCanvas } from './components/editor-canvas';
 import { SettingsPanel } from './components/settings-panel';
 import { SettingsModal } from './components/settings-modal';
+import { UpdateModal } from './components/update-modal';
 import { StatusBar } from './components/status-bar';
 import { AnnotationToolbar } from './components/annotation-toolbar';
 import { ExportToolbar } from './components/export-toolbar';
@@ -15,7 +16,6 @@ import { CaptureResult, CaptureMode, WindowInfo, Annotation, EditorTool, OutputR
 import {
   CaptureFullscreen,
   CaptureWindow,
-  GetDisplayBounds,
   SaveImage,
   QuickSave,
   MinimizeToTray,
@@ -24,7 +24,11 @@ import {
   UpdateWindowSize,
   GetConfig,
   OpenImage,
+  GetClipboardImage,
+  CheckForUpdate,
+  GetSkippedVersion,
 } from '../wailsjs/go/main/App';
+import { updater } from '../wailsjs/go/models';
 import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
 
 // Storage key for persistent editor settings
@@ -36,6 +40,7 @@ interface EditorSettings {
   shadowSize: number;
   backgroundColor: string;
   outputRatio: OutputRatio;
+  showBackground: boolean;
 }
 
 const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -44,6 +49,7 @@ const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   shadowSize: 20,
   backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   outputRatio: 'auto',
+  showBackground: true,
 };
 
 // Load settings from localStorage
@@ -82,7 +88,13 @@ function calculateOutputDimensions(
   const targetRatio = parseRatio(outputRatio);
 
   if (targetRatio === null) {
-    // Auto mode: output size same as screenshot dimensions
+    // Auto mode: include padding if set, otherwise raw screenshot size
+    if (padding > 0) {
+      return {
+        totalWidth: screenshotWidth + padding * 2,
+        totalHeight: screenshotHeight + padding * 2
+      };
+    }
     return { totalWidth: screenshotWidth, totalHeight: screenshotHeight };
   }
 
@@ -133,59 +145,11 @@ function constrainToAspectRatio(area: CropArea, ratio: CropAspectRatio): CropAre
   }
 }
 
-// Helper to copy screenshot to clipboard with format from config
-async function copyScreenshotToClipboard(screenshotData: string, format: 'png' | 'jpeg', jpegQuality: number): Promise<boolean> {
-  try {
-    // Create an image from the base64 data
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = `data:image/png;base64,${screenshotData}`;
-    });
-
-    // Create canvas and draw image
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return false;
-    ctx.drawImage(img, 0, 0);
-
-    // Convert to blob with appropriate format
-    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-    const quality = format === 'jpeg' ? jpegQuality / 100 : undefined;
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, mimeType, quality);
-    });
-
-    if (!blob) return false;
-
-    // Copy to clipboard - always use PNG for clipboard compatibility
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'image/png': format === 'png' ? blob : await new Promise<Blob>((resolve) => {
-          canvas.toBlob((b) => resolve(b!), 'image/png');
-        }),
-      }),
-    ]);
-    return true;
-  } catch (error) {
-    console.error('Failed to copy screenshot to clipboard:', error);
-    return false;
-  }
-}
-
 function App() {
   const stageRef = useRef<Konva.Stage>(null);
   const [screenshot, setScreenshot] = useState<CaptureResult | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
-  const [showRegionSelector, setShowRegionSelector] = useState(false);
-  const [displayBounds, setDisplayBounds] = useState({ width: 1920, height: 1080 });
-  const [regionScreenshot, setRegionScreenshot] = useState<string | undefined>();
-  const [regionScaleRatio, setRegionScaleRatio] = useState(1);
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
 
   // Editor settings (loaded from localStorage with lazy initialization)
@@ -194,10 +158,25 @@ function App() {
   const [shadowSize, setShadowSize] = useState(() => loadEditorSettings().shadowSize);
   const [backgroundColor, setBackgroundColor] = useState(() => loadEditorSettings().backgroundColor);
   const [outputRatio, setOutputRatio] = useState<OutputRatio>(() => loadEditorSettings().outputRatio);
+  const [showBackground, setShowBackground] = useState(() => loadEditorSettings().showBackground);
+  // Stores settings when background is hidden, so they can be restored
+  const [savedBackgroundSettings, setSavedBackgroundSettings] = useState<{
+    padding: number;
+    cornerRadius: number;
+    outputRatio: OutputRatio;
+  } | null>(null);
 
-  // Annotation state
+  // Annotation state with undo/redo support
   const [activeTool, setActiveTool] = useState<EditorTool>('select');
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const {
+    state: annotations,
+    set: setAnnotations,
+    undo: undoAnnotations,
+    redo: redoAnnotations,
+    reset: resetAnnotations,
+    canUndo,
+    canRedo,
+  } = useUndoRedo<Annotation[]>([]);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [strokeColor, setStrokeColor] = useState('#ef4444');
   const [strokeWidth, setStrokeWidth] = useState(4);
@@ -221,13 +200,68 @@ function App() {
   // Export state
   const [isExporting, setIsExporting] = useState(false);
 
+  // Auto-copy state: tracks when a fresh capture needs auto-copy after canvas renders
+  const [pendingAutoCopy, setPendingAutoCopy] = useState(false);
+
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
 
+  // Update modal state
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<updater.UpdateInfo | null>(null);
+
   // Persist editor settings to localStorage when they change
   useEffect(() => {
-    saveEditorSettings({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio });
-  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio]);
+    saveEditorSettings({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground });
+  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground]);
+
+  // Check for updates on startup
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        const cfg = await GetConfig();
+        if (!cfg.update?.checkOnStartup) return;
+
+        const currentVersion = __APP_VERSION__;
+        const info = await CheckForUpdate(currentVersion);
+
+        if (info && info.available) {
+          // Check if user skipped this version
+          const skippedVersion = await GetSkippedVersion();
+          if (skippedVersion === info.latestVersion) return;
+
+          setUpdateInfo(info);
+          setShowUpdateModal(true);
+        }
+      } catch (err) {
+        console.error('Failed to check for updates:', err);
+      }
+    };
+
+    // Delay check to not slow down app startup
+    const timer = setTimeout(checkForUpdates, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Handle background visibility toggle
+  const handleShowBackgroundChange = useCallback((show: boolean) => {
+    if (show) {
+      // Restore previous settings when showing background
+      if (savedBackgroundSettings !== null) {
+        setPadding(savedBackgroundSettings.padding);
+        setCornerRadius(savedBackgroundSettings.cornerRadius);
+        setOutputRatio(savedBackgroundSettings.outputRatio);
+        setSavedBackgroundSettings(null);
+      }
+    } else {
+      // Save current settings and reset when hiding background
+      setSavedBackgroundSettings({ padding, cornerRadius, outputRatio });
+      setPadding(0);
+      setCornerRadius(0);
+      setOutputRatio('auto');
+    }
+    setShowBackground(show);
+  }, [padding, cornerRadius, outputRatio, savedBackgroundSettings]);
 
   // Track window size for persistence on close
   // Use Wails WindowGetSize API for accurate DPI-aware dimensions
@@ -262,19 +296,13 @@ function App() {
     }
 
     if (mode === 'region') {
-      // Prepare region capture - this will hide window, take screenshot, and make window fullscreen
+      // Native overlay handles region capture - just trigger it
       try {
-        const data = await PrepareRegionCapture();
-        if (!data.screenshot) {
-          throw new Error('No screenshot data received');
-        }
-        setDisplayBounds({ width: data.width, height: data.height });
-        setRegionScreenshot(data.screenshot.data);
-        setRegionScaleRatio(data.scaleRatio || 1);
-        setShowRegionSelector(true);
+        await PrepareRegionCapture();
+        // Selection result comes via 'region:selected' event
       } catch (error) {
-        console.error('Failed to prepare region capture:', error);
-        setStatusMessage('Failed to prepare region capture');
+        console.error('Failed to start region capture:', error);
+        setStatusMessage('Failed to start region capture');
         setTimeout(() => setStatusMessage(undefined), 3000);
       }
       return;
@@ -293,29 +321,14 @@ function App() {
       }
 
       setScreenshot(result);
-      // Reset annotations for new capture
-      setAnnotations([]);
+      // Reset annotations for new capture (clears history)
+      resetAnnotations([]);
       setSelectedAnnotationId(null);
       setActiveTool('select');
       setStatusMessage(undefined);
 
-      // Auto-copy to clipboard if enabled (delay to ensure window is visible)
-      setTimeout(async () => {
-        try {
-          const cfg = await GetConfig();
-          if (cfg.export?.autoCopyToClipboard) {
-            const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
-            const quality = cfg.export?.jpegQuality || 95;
-            const success = await copyScreenshotToClipboard(result.data, format, quality);
-            if (success) {
-              setStatusMessage('Copied to clipboard!');
-              setTimeout(() => setStatusMessage(undefined), 2000);
-            }
-          }
-        } catch (err) {
-          console.error('Auto-copy failed:', err);
-        }
-      }, 100);
+      // Trigger auto-copy of styled canvas (handled by useEffect)
+      setPendingAutoCopy(true);
     } catch (error) {
       console.error('Capture failed:', error);
       setStatusMessage('Capture failed');
@@ -323,7 +336,7 @@ function App() {
     }
 
     setIsCapturing(false);
-  }, []);
+  }, [resetAnnotations]);
 
   const handleWindowSelect = async (window: WindowInfo) => {
     setShowWindowPicker(false);
@@ -333,29 +346,14 @@ function App() {
     try {
       const result = await CaptureWindow(window.handle) as CaptureResult;
       setScreenshot(result);
-      // Reset annotations for new capture
-      setAnnotations([]);
+      // Reset annotations for new capture (clears history)
+      resetAnnotations([]);
       setSelectedAnnotationId(null);
       setActiveTool('select');
       setStatusMessage(undefined);
 
-      // Auto-copy to clipboard if enabled (delay to ensure window is visible)
-      setTimeout(async () => {
-        try {
-          const cfg = await GetConfig();
-          if (cfg.export?.autoCopyToClipboard) {
-            const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
-            const quality = cfg.export?.jpegQuality || 95;
-            const success = await copyScreenshotToClipboard(result.data, format, quality);
-            if (success) {
-              setStatusMessage('Copied to clipboard!');
-              setTimeout(() => setStatusMessage(undefined), 2000);
-            }
-          }
-        } catch (err) {
-          console.error('Auto-copy failed:', err);
-        }
-      }, 100);
+      // Trigger auto-copy of styled canvas (handled by useEffect)
+      setPendingAutoCopy(true);
     } catch (error) {
       console.error('Window capture failed:', error);
       setStatusMessage('Capture failed');
@@ -365,99 +363,27 @@ function App() {
     setIsCapturing(false);
   };
 
-  const handleRegionSelect = async (x: number, y: number, width: number, height: number) => {
-    setShowRegionSelector(false);
-    setIsCapturing(true);
-    setStatusMessage('Capturing region...');
+  // Handle native overlay selection result (already cropped by backend)
+  const handleNativeRegionSelect = useCallback((width: number, height: number, screenshotData: string) => {
+    // Set screenshot directly - already cropped by Go backend
+    setScreenshot({ width, height, data: screenshotData });
 
-    try {
-      // Crop the selected region from the fullscreen screenshot (client-side)
-      if (!regionScreenshot) {
-        throw new Error('No screenshot data available');
-      }
+    // Reset annotations for new capture (clears history)
+    resetAnnotations([]);
+    setSelectedAnnotationId(null);
+    setActiveTool('select');
+    setStatusMessage(undefined);
 
-      // Create an image from the fullscreen screenshot
-      const img = new Image();
-      img.onload = async () => {
-        // Apply DPI scale ratio to get actual pixel coordinates in the screenshot
-        const scale = regionScaleRatio;
-        const scaledX = Math.round(x * scale);
-        const scaledY = Math.round(y * scale);
-        const scaledWidth = Math.round(width * scale);
-        const scaledHeight = Math.round(height * scale);
+    // Restore window to normal state
+    FinishRegionCapture();
 
-        const canvas = document.createElement('canvas');
-        canvas.width = scaledWidth;
-        canvas.height = scaledHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          setStatusMessage('Failed to create canvas context');
-          setIsCapturing(false);
-          return;
-        }
+    // Trigger auto-copy of styled canvas (handled by useEffect)
+    setPendingAutoCopy(true);
+  }, [resetAnnotations]);
 
-        // Crop the selected region from the high-DPI screenshot
-        ctx.drawImage(img, scaledX, scaledY, scaledWidth, scaledHeight, 0, 0, scaledWidth, scaledHeight);
-
-        // Get the cropped image as base64
-        const croppedData = canvas.toDataURL('image/png').split(',')[1];
-        setScreenshot({
-          width: scaledWidth,
-          height: scaledHeight,
-          data: croppedData,
-        });
-        // Reset annotations for new capture
-        setAnnotations([]);
-        setSelectedAnnotationId(null);
-        setActiveTool('select');
-        setStatusMessage(undefined);
-        setIsCapturing(false);
-
-        // Restore window to normal state
-        FinishRegionCapture();
-        setRegionScreenshot(undefined);
-        setRegionScaleRatio(1);
-
-        // Auto-copy to clipboard if enabled (delay to ensure window is visible)
-        setTimeout(async () => {
-          try {
-            const cfg = await GetConfig();
-            if (cfg.export?.autoCopyToClipboard) {
-              const format = (cfg.export?.defaultFormat || 'png') as 'png' | 'jpeg';
-              const quality = cfg.export?.jpegQuality || 95;
-              const success = await copyScreenshotToClipboard(croppedData, format, quality);
-              if (success) {
-                setStatusMessage('Copied to clipboard!');
-                setTimeout(() => setStatusMessage(undefined), 2000);
-              }
-            }
-          } catch (err) {
-            console.error('Auto-copy failed:', err);
-          }
-        }, 100);
-      };
-      img.onerror = () => {
-        setStatusMessage('Failed to load screenshot');
-        setIsCapturing(false);
-        FinishRegionCapture();
-        setRegionScreenshot(undefined);
-        setRegionScaleRatio(1);
-      };
-      img.src = `data:image/png;base64,${regionScreenshot}`;
-    } catch (error) {
-      console.error('Region capture failed:', error);
-      setStatusMessage('Capture failed');
-      setTimeout(() => setStatusMessage(undefined), 3000);
-      setIsCapturing(false);
-      FinishRegionCapture();
-      setRegionScreenshot(undefined);
-      setRegionScaleRatio(1);
-    }
-  };
-
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setScreenshot(null);
-    setAnnotations([]);
+    resetAnnotations([]);
     setSelectedAnnotationId(null);
     setStatusMessage(undefined);
     // Reset crop state
@@ -470,7 +396,7 @@ function App() {
     });
     setCropArea(null);
     setCropMode(false);
-  };
+  }, [resetAnnotations]);
 
   const handleImportImage = useCallback(async () => {
     setStatusMessage('Opening file dialog...');
@@ -485,8 +411,8 @@ function App() {
       }
 
       setScreenshot(result as CaptureResult);
-      // Reset annotations and crop state for imported image
-      setAnnotations([]);
+      // Reset annotations and crop state for imported image (clears history)
+      resetAnnotations([]);
       setSelectedAnnotationId(null);
       setActiveTool('select');
       setCropState({
@@ -505,27 +431,54 @@ function App() {
       setStatusMessage('Failed to import image');
       setTimeout(() => setStatusMessage(undefined), 3000);
     }
-  }, []);
+  }, [resetAnnotations]);
 
-  // Listen for global hotkey events from backend
+  const handleClipboardCapture = useCallback(async () => {
+    try {
+      const result = await GetClipboardImage();
+
+      if (!result) {
+        setStatusMessage('No image in clipboard');
+        setTimeout(() => setStatusMessage(undefined), 3000);
+        return;
+      }
+
+      setScreenshot(result as CaptureResult);
+      // Reset annotations and crop state for clipboard image (clears history)
+      resetAnnotations([]);
+      setSelectedAnnotationId(null);
+      setActiveTool('select');
+      setCropState({
+        originalImage: null,
+        croppedImage: null,
+        originalAnnotations: [],
+        lastCropArea: null,
+        isCropApplied: false,
+      });
+      setCropArea(null);
+      setCropMode(false);
+      setStatusMessage('Image pasted from clipboard');
+      setTimeout(() => setStatusMessage(undefined), 2000);
+    } catch (error) {
+      console.error('Clipboard paste failed:', error);
+      setStatusMessage('No image in clipboard');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+    }
+  }, [resetAnnotations]);
+
+  // Listen for global hotkey events and native overlay events from backend
   useEffect(() => {
     const handleFullscreen = () => {
       handleCapture('fullscreen');
     };
     const handleRegion = async () => {
-      // Prepare region capture - this will hide window, take screenshot, and make window fullscreen
+      // Native overlay handles region capture - just trigger it
       try {
-        const data = await PrepareRegionCapture();
-        if (!data.screenshot) {
-          throw new Error('No screenshot data received');
-        }
-        setDisplayBounds({ width: data.width, height: data.height });
-        setRegionScreenshot(data.screenshot.data);
-        setRegionScaleRatio(data.scaleRatio || 1);
-        setShowRegionSelector(true);
+        await PrepareRegionCapture();
+        // Selection result comes via 'region:selected' event
       } catch (error) {
-        console.error('Failed to prepare region capture:', error);
-        setStatusMessage('Failed to prepare region capture');
+        console.error('Failed to start region capture:', error);
+        setStatusMessage('Failed to start region capture');
         setTimeout(() => setStatusMessage(undefined), 3000);
       }
     };
@@ -533,16 +486,27 @@ function App() {
       setShowWindowPicker(true);
     };
 
+    // Handle native overlay selection result (already cropped)
+    const handleRegionSelected = (data: {
+      width: number;
+      height: number;
+      screenshot: string;
+    }) => {
+      handleNativeRegionSelect(data.width, data.height, data.screenshot);
+    };
+
     EventsOn('hotkey:fullscreen', handleFullscreen);
     EventsOn('hotkey:region', handleRegion);
     EventsOn('hotkey:window', handleWindow);
+    EventsOn('region:selected', handleRegionSelected);
 
     return () => {
       EventsOff('hotkey:fullscreen');
       EventsOff('hotkey:region');
       EventsOff('hotkey:window');
+      EventsOff('region:selected');
     };
-  }, [handleCapture]);
+  }, [handleCapture, handleNativeRegionSelect]);
 
   // Handle minimize to tray
   const handleMinimizeToTray = useCallback(() => {
@@ -740,13 +704,14 @@ function App() {
 
     // Set cropped image as current screenshot
     setScreenshot(croppedImage);
-    setAnnotations(adjustedAnnotations);
+    // Reset annotations with new positions (clears undo history since canvas context changed)
+    resetAnnotations(adjustedAnnotations);
 
     // Exit crop mode
     setCropMode(false);
     setCropArea(null);
     setActiveTool('select');
-  }, [cropArea, screenshot, annotations, cropState, stageRef]);
+  }, [cropArea, screenshot, annotations, cropState, stageRef, resetAnnotations]);
 
   const handleCropCancel = useCallback(() => {
     // If crop was applied, restore the cropped view
@@ -788,7 +753,8 @@ function App() {
   const handleCropReset = useCallback(() => {
     if (cropState.originalImage) {
       setScreenshot(cropState.originalImage);
-      setAnnotations(cropState.originalAnnotations);
+      // Reset annotations to original (clears undo history since canvas context changed)
+      resetAnnotations(cropState.originalAnnotations);
     }
     setCropState({
       originalImage: null,
@@ -800,7 +766,7 @@ function App() {
     setCropArea(null);
     setCropMode(false);
     setActiveTool('select');
-  }, [cropState]);
+  }, [cropState, resetAnnotations]);
 
   // Tool change handler
   const handleToolChange = useCallback((tool: EditorTool) => {
@@ -823,6 +789,24 @@ function App() {
       // Skip if typing in an input field
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
+      }
+
+      // Undo/Redo shortcuts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y)
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            redoAnnotations();
+          } else {
+            undoAnnotations();
+          }
+          return;
+        }
+        if (e.key === 'y' || e.key === 'Y') {
+          e.preventDefault();
+          redoAnnotations();
+          return;
+        }
       }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -868,7 +852,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedAnnotationId, handleDeleteSelected, handleToolChange, cropMode, handleCropCancel, handleCropToolSelect]);
+  }, [selectedAnnotationId, handleDeleteSelected, handleToolChange, cropMode, handleCropCancel, handleCropToolSelect, undoAnnotations, redoAnnotations]);
 
   // Export helpers - simplified since cropped image is now the current screenshot
   const getCanvasDataUrl = useCallback((format: 'png' | 'jpeg'): string | null => {
@@ -978,15 +962,10 @@ function App() {
     setTimeout(() => setStatusMessage(undefined), 3000);
   }, [getCanvasDataUrl]);
 
-  const handleCopyToClipboard = useCallback(async () => {
+  // Helper to copy styled canvas to clipboard (used by auto-copy and manual copy)
+  const copyStyledCanvasToClipboard = useCallback(async (): Promise<boolean> => {
     const stage = stageRef.current;
-    if (!stage || !screenshot) {
-      setStatusMessage('Copy failed: No canvas available');
-      return;
-    }
-
-    setIsExporting(true);
-    setStatusMessage('Copying to clipboard...');
+    if (!stage || !screenshot) return false;
 
     try {
       // Calculate the actual output dimensions
@@ -1028,25 +1007,83 @@ function App() {
         canvas.toBlob(resolve, 'image/png');
       });
 
-      if (!blob) {
-        throw new Error('Failed to create image blob');
-      }
+      if (!blob) return false;
 
       await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob,
-        }),
+        new ClipboardItem({ 'image/png': blob }),
       ]);
-
-      setStatusMessage('Copied to clipboard!');
+      return true;
     } catch (error) {
-      console.error('Copy to clipboard failed:', error);
+      console.error('Failed to copy styled canvas:', error);
+      return false;
+    }
+  }, [screenshot, padding, outputRatio]);
+
+  // Manual copy to clipboard handler (uses helper)
+  const handleCopyToClipboard = useCallback(async () => {
+    if (!stageRef.current || !screenshot) {
+      setStatusMessage('Copy failed: No canvas available');
+      return;
+    }
+
+    setIsExporting(true);
+    setStatusMessage('Copying to clipboard...');
+
+    const success = await copyStyledCanvasToClipboard();
+
+    if (success) {
+      setStatusMessage('Copied to clipboard!');
+    } else {
       setStatusMessage('Copy to clipboard failed');
     }
 
     setIsExporting(false);
     setTimeout(() => setStatusMessage(undefined), 2000);
-  }, [screenshot, padding, outputRatio]);
+  }, [screenshot, copyStyledCanvasToClipboard]);
+
+  // Auto-copy styled canvas to clipboard after capture completes
+  useEffect(() => {
+    if (!pendingAutoCopy || !screenshot) return;
+
+    let cancelled = false;
+
+    const performAutoCopy = async () => {
+      try {
+        const cfg = await GetConfig();
+        if (cancelled) return;
+
+        if (!cfg.export?.autoCopyToClipboard) {
+          setPendingAutoCopy(false);
+          return;
+        }
+
+        // Wait for canvas to render with new screenshot
+        // 300ms accounts for: React re-render + Konva image load
+        await new Promise(resolve => setTimeout(resolve, 300));
+        if (cancelled) return;
+
+        const success = await copyStyledCanvasToClipboard();
+        if (cancelled) return;
+
+        if (success) {
+          setStatusMessage('Copied to clipboard!');
+          setTimeout(() => setStatusMessage(undefined), 2000);
+        }
+      } catch (err) {
+        console.error('Auto-copy failed:', err);
+      }
+
+      if (!cancelled) {
+        setPendingAutoCopy(false);
+      }
+    };
+
+    performAutoCopy();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingAutoCopy, screenshot, copyStyledCanvasToClipboard]);
 
   // Keyboard shortcuts for export and import
   useEffect(() => {
@@ -1087,6 +1124,7 @@ function App() {
         onMinimize={handleMinimizeToTray}
         onOpenSettings={() => setShowSettings(true)}
         onImportImage={handleImportImage}
+        onClipboardCapture={handleClipboardCapture}
       />
 
       {screenshot && !cropMode && (
@@ -1106,6 +1144,10 @@ function App() {
             onDeleteSelected={handleDeleteSelected}
             hasSelection={!!selectedAnnotationId}
             selectedAnnotation={selectedAnnotationId ? annotations.find(a => a.id === selectedAnnotationId) : undefined}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={undoAnnotations}
+            onRedo={redoAnnotations}
           />
         </>
       )}
@@ -1161,6 +1203,7 @@ function App() {
             shadowSize={shadowSize}
             backgroundColor={backgroundColor}
             outputRatio={outputRatio}
+            showBackground={showBackground}
             imageWidth={screenshot.width}
             imageHeight={screenshot.height}
             onPaddingChange={setPadding}
@@ -1168,6 +1211,7 @@ function App() {
             onShadowSizeChange={setShadowSize}
             onBackgroundChange={setBackgroundColor}
             onOutputRatioChange={setOutputRatio}
+            onShowBackgroundChange={handleShowBackgroundChange}
           />
         )}
       </div>
@@ -1189,23 +1233,15 @@ function App() {
         onSelect={handleWindowSelect}
       />
 
-      <RegionSelector
-        isOpen={showRegionSelector}
-        onClose={() => {
-          setShowRegionSelector(false);
-          FinishRegionCapture();
-          setRegionScreenshot(undefined);
-          setRegionScaleRatio(1);
-        }}
-        onSelect={handleRegionSelect}
-        screenWidth={displayBounds.width}
-        screenHeight={displayBounds.height}
-        screenshotData={regionScreenshot}
-      />
-
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <UpdateModal
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        updateInfo={updateInfo}
       />
     </div>
   );

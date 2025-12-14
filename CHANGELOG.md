@@ -1,3 +1,67 @@
+# [1.2.0-beta.4](https://github.com/mrgoonie/winshot/compare/v1.2.0-beta.3...v1.2.0-beta.4) (2025-12-14)
+
+
+### Bug Fixes
+
+* **settings:** migrate background images from localStorage to backend config ([bfa2744](https://github.com/mrgoonie/winshot/commit/bfa27442f2ac80791a45443458064864692bdab0))
+
+
+### Features
+
+* **annotations:** implement undo/redo with keyboard shortcuts ([94ed01c](https://github.com/mrgoonie/winshot/commit/94ed01c486628da51398e587edb1fb497f669bf5))
+* **update:** implement auto-update feature for GitHub Releases ([96194ef](https://github.com/mrgoonie/winshot/commit/96194ef13e13b909f3fb16cf0b025a56005041c0))
+
+# [1.2.0-beta.3](https://github.com/mrgoonie/winshot/compare/v1.2.0-beta.2...v1.2.0-beta.3) (2025-12-13)
+
+
+### Bug Fixes
+
+* **output:** include padding in auto mode dimensions calculation ([8f07694](https://github.com/mrgoonie/winshot/commit/8f07694f9e74f6d6877781b60220c47b4bbdd5ac))
+
+# [1.2.0-beta.2](https://github.com/mrgoonie/winshot/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2025-12-12)
+
+
+### Features
+
+* add background visibility toggle and improve overlay focus ([39fadf3](https://github.com/mrgoonie/winshot/commit/39fadf3e59c211adc0d56f604266282302d8a80e))
+
+# [1.2.0-beta.1](https://github.com/mrgoonie/winshot/compare/v1.1.0...v1.2.0-beta.1) (2025-12-12)
+
+
+### Bug Fixes
+
+* **app:** restore window position after region capture ([38e1191](https://github.com/mrgoonie/winshot/commit/38e119109376f84e451322ba84a1d8edd0583d34))
+* **hotkeys:** resolve goroutine thread affinity causing hotkey registration failure ([1d683cc](https://github.com/mrgoonie/winshot/commit/1d683ccaffa9043b235fdaf8e3e88bd89ca295e0))
+* **quick-save:** use configured folder instead of hardcoding save directory ([d868093](https://github.com/mrgoonie/winshot/commit/d868093ae7173e8647ccaba8c38751e50fca6879))
+* resolve 3 bugs from issue [#21](https://github.com/mrgoonie/winshot/issues/21) ([9652b5b](https://github.com/mrgoonie/winshot/commit/9652b5b12697b7d2cee74622d68acdcf5eafb62d))
+* resolve merge conflicts from Vivusk/winshot PR [#36](https://github.com/mrgoonie/winshot/issues/36) ([2515593](https://github.com/mrgoonie/winshot/commit/25155933a02dc995eb9d84f11665acbefacfe878))
+* **startup:** minimize app window on startup when configured ([3f5f4d1](https://github.com/mrgoonie/winshot/commit/3f5f4d1a7b87e12209e18ba5a0f125bfa0511290)), closes [#31](https://github.com/mrgoonie/winshot/issues/31)
+* **tray:** resolve quit button not working in tray context menu ([a459568](https://github.com/mrgoonie/winshot/commit/a45956844472465b18c8893d6c9ac3f6b8e4da03))
+
+
+### Features
+
+* **capture:** add clipboard image paste support ([03cf0fd](https://github.com/mrgoonie/winshot/commit/03cf0fd0698e5f199965fa3c923eec469a2c341e))
+* **capture:** add multi-monitor region capture support ([0f1a8d1](https://github.com/mrgoonie/winshot/commit/0f1a8d123162d701baa35f4b121b505fd069a5d3))
+* **clipboard:** auto-copy styled canvas instead of raw screenshot ([20ad92b](https://github.com/mrgoonie/winshot/commit/20ad92b2ef56359aff04cdd299f49146d4820474))
+* **editor:** copy rendered canvas with applied settings to clipboard ([dbe91dd](https://github.com/mrgoonie/winshot/commit/dbe91dd824be72d14812bde88b06d7c90d305f1e))
+* **overlay:** implement native Win32 region selection overlay ([22da2ac](https://github.com/mrgoonie/winshot/commit/22da2acdc2ba59b15fbc70098d97729336ef2b0f))
+
+# [1.1.0-beta.3](https://github.com/mrgoonie/winshot/compare/v1.1.0-beta.2...v1.1.0-beta.3) (2025-12-10)
+
+
+### Bug Fixes
+
+* **quick-save:** use configured folder instead of hardcoding save directory ([d868093](https://github.com/mrgoonie/winshot/commit/d868093ae7173e8647ccaba8c38751e50fca6879))
+* resolve 3 bugs from issue [#21](https://github.com/mrgoonie/winshot/issues/21) ([9652b5b](https://github.com/mrgoonie/winshot/commit/9652b5b12697b7d2cee74622d68acdcf5eafb62d))
+* **startup:** minimize app window on startup when configured ([3f5f4d1](https://github.com/mrgoonie/winshot/commit/3f5f4d1a7b87e12209e18ba5a0f125bfa0511290)), closes [#31](https://github.com/mrgoonie/winshot/issues/31)
+* **tray:** resolve quit button not working in tray context menu ([a459568](https://github.com/mrgoonie/winshot/commit/a45956844472465b18c8893d6c9ac3f6b8e4da03))
+
+
+### Features
+
+* **editor:** copy rendered canvas with applied settings to clipboard ([dbe91dd](https://github.com/mrgoonie/winshot/commit/dbe91dd824be72d14812bde88b06d7c90d305f1e))
+
 # [1.1.0](https://github.com/mrgoonie/winshot/compare/v1.0.0...v1.1.0) (2025-12-06)
 
 
