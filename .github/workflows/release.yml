@@ -88,6 +88,7 @@ jobs:
             build/bin/winshot-amd64-installer.exe
 
   release:
+    name: ${{ github.ref == 'refs/heads/dev' && 'Beta Release' || 'Production Release' }}
     needs: build
     if: needs.build.outputs.should_release == 'true'
     runs-on: ubuntu-latest
