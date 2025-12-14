@@ -7,6 +7,7 @@ import { WindowPicker } from './components/window-picker';
 import { EditorCanvas } from './components/editor-canvas';
 import { SettingsPanel } from './components/settings-panel';
 import { SettingsModal } from './components/settings-modal';
+import { UpdateModal } from './components/update-modal';
 import { StatusBar } from './components/status-bar';
 import { AnnotationToolbar } from './components/annotation-toolbar';
 import { ExportToolbar } from './components/export-toolbar';
@@ -24,7 +25,10 @@ import {
   GetConfig,
   OpenImage,
   GetClipboardImage,
+  CheckForUpdate,
+  GetSkippedVersion,
 } from '../wailsjs/go/main/App';
+import { updater } from '../wailsjs/go/models';
 import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
 
 // Storage key for persistent editor settings
@@ -202,10 +206,42 @@ function App() {
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
 
+  // Update modal state
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<updater.UpdateInfo | null>(null);
+
   // Persist editor settings to localStorage when they change
   useEffect(() => {
     saveEditorSettings({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground });
   }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground]);
+
+  // Check for updates on startup
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        const cfg = await GetConfig();
+        if (!cfg.update?.checkOnStartup) return;
+
+        const currentVersion = __APP_VERSION__;
+        const info = await CheckForUpdate(currentVersion);
+
+        if (info && info.available) {
+          // Check if user skipped this version
+          const skippedVersion = await GetSkippedVersion();
+          if (skippedVersion === info.latestVersion) return;
+
+          setUpdateInfo(info);
+          setShowUpdateModal(true);
+        }
+      } catch (err) {
+        console.error('Failed to check for updates:', err);
+      }
+    };
+
+    // Delay check to not slow down app startup
+    const timer = setTimeout(checkForUpdates, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Handle background visibility toggle
   const handleShowBackgroundChange = useCallback((show: boolean) => {
@@ -1200,6 +1236,12 @@ function App() {
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <UpdateModal
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        updateInfo={updateInfo}
       />
     </div>
   );
