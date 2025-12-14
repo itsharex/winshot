@@ -1,3 +1,10 @@
+# [1.2.0-beta.5](https://github.com/mrgoonie/winshot/compare/v1.2.0-beta.4...v1.2.0-beta.5) (2025-12-14)
+
+
+### Bug Fixes
+
+* **ci:** exclude merge commits from release check ([32e0540](https://github.com/mrgoonie/winshot/commit/32e054025de5a8f95d683e7e5069637eb8a22670))
+
 # [1.2.0-beta.4](https://github.com/mrgoonie/winshot/compare/v1.2.0-beta.3...v1.2.0-beta.4) (2025-12-14)
 
 
