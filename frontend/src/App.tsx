@@ -497,6 +497,87 @@ function App() {
     }
   }, [resetAnnotations]);
 
+  // Drag & drop state
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Handle drag & drop image import
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+
+    const file = files[0];
+    // Check if it's an image file
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage('Only image files are supported');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+      return;
+    }
+
+    // Read file as base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // Extract base64 data without the data:image/xxx;base64, prefix
+        const base64Data = (reader.result as string).split(',')[1];
+        const result: CaptureResult = {
+          width: img.width,
+          height: img.height,
+          data: base64Data,
+        };
+        setScreenshot(result);
+        resetAnnotations([]);
+        setSelectedAnnotationId(null);
+        setActiveTool('select');
+        setCropState({
+          originalImage: null,
+          croppedImage: null,
+          originalAnnotations: [],
+          lastCropArea: null,
+          isCropApplied: false,
+        });
+        setCropArea(null);
+        setCropMode(false);
+        setStatusMessage(`Imported: ${file.name}`);
+        setTimeout(() => setStatusMessage(undefined), 2000);
+      };
+      img.onerror = () => {
+        setStatusMessage('Failed to load image');
+        setTimeout(() => setStatusMessage(undefined), 3000);
+      };
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => {
+      setStatusMessage('Failed to read file');
+      setTimeout(() => setStatusMessage(undefined), 3000);
+    };
+    reader.readAsDataURL(file);
+  }, [resetAnnotations]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set dragging to false if leaving the main container
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  }, []);
+
   // Listen for global hotkey events and native overlay events from backend
   useEffect(() => {
     const handleFullscreen = () => {
@@ -1186,7 +1267,23 @@ function App() {
   }, [screenshot, handleSave, handleQuickSave, handleCopyToClipboard, handleImportImage, handleClipboardCapture]);
 
   return (
-    <div className="flex flex-col h-screen bg-transparent">
+    <div
+      className="flex flex-col h-screen bg-transparent relative"
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+    >
+      {/* Drag & drop overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-violet-500/20 backdrop-blur-sm border-2 border-dashed border-violet-400 rounded-lg m-2 pointer-events-none">
+          <div className="text-center">
+            <div className="text-4xl mb-2">📷</div>
+            <div className="text-lg font-semibold text-violet-200">Drop image to import</div>
+            <div className="text-sm text-violet-300/70">PNG, JPEG, GIF, WebP supported</div>
+          </div>
+        </div>
+      )}
       <TitleBar onMinimize={handleMinimizeToTray} />
       <CaptureToolbar
         onCapture={handleCapture}
