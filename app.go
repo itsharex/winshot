@@ -89,13 +89,9 @@ func (a *App) startup(ctx context.Context) {
 	a.lastWidth = cfg.Window.Width
 	a.lastHeight = cfg.Window.Height
 
-	// Handle "start minimized to tray" setting
+	// Track hidden state if app started minimized to tray (set via Wails StartHidden option)
 	if cfg.Startup.MinimizeToTray {
-		// Use goroutine with delay to let window fully initialize first
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			runtime.WindowHide(a.ctx)
-		}()
+		a.isWindowHidden = true
 	}
 }
 

@@ -84,31 +84,53 @@ D:\www\winshot/
 ## Go Backend (~3,100 LOC)
 
 ### Package: `internal/config`
-**Files:** config.go (80 LOC), startup.go (40 LOC)
+**Files:** config.go (80 LOC), startup.go (100 LOC, Phase 1 update)
 
-Manages application configuration persistence.
+Manages application configuration persistence and Windows startup registry integration.
 
 **Key Structures:**
 ```go
 type Config struct {
   Hotkeys    HotkeyConfig
-  Startup    StartupConfig
+  Startup    StartupConfig    // Includes MinimizeToTray, LaunchOnStartup, CloseToTray
   QuickSave  QuickSaveConfig
   Export     ExportConfig
   Window     WindowConfig
+}
+
+type StartupConfig struct {
+  LaunchOnStartup bool  // Windows Registry autostart
+  MinimizeToTray  bool  // Start hidden (Wails StartHidden)
+  CloseToTray     bool  // Minimize on close button click
 }
 ```
 
 **Features:**
 - JSON persistence at `%APPDATA%\WinShot\config.json`
-- Windows Registry startup entry (via startup.go)
+- Windows Registry startup entry with quoted path handling (Phase 1: Fixed quoting)
+- Registry verification for write integrity (Phase 1: Added)
+- Improved error handling with context (Phase 1: Enhanced)
 - Default values factory pattern
 - Type-safe config loading
+
+**Registry Integration (Phase 1 - Startup Fixes):**
+- `IsStartupEnabled()` - Check if app registered in Run key
+- `SetStartupEnabled(enabled bool)` - Enable/disable autostart
+- `enableStartup()` - Private: Write quoted path to registry with verification
+- `disableStartup()` - Private: Remove registry entry gracefully
+
+**Key Changes (Phase 1):**
+1. Fixed registry path quoting to handle spaces in executable path
+2. Added verification step to confirm registry write succeeded
+3. Improved error wrapping with `fmt.Errorf()` for better debugging
+4. Graceful disableStartup if registry key doesn't exist
 
 **Entry Points:**
 - `config.Load()` - Load or create config
 - `config.Save()` - Persist to disk
 - `config.Default()` - Get default config
+- `config.IsStartupEnabled()` - Check autostart status
+- `config.SetStartupEnabled(bool)` - Toggle autostart
 
 ### Package: `internal/hotkeys`
 **File:** hotkeys.go (150 LOC)
@@ -283,14 +305,14 @@ Central App struct with all Wails-bound methods called from frontend.
 type App struct {
   ctx              context.Context
   hotkeyManager    *hotkeys.HotkeyManager
-  overlayManager   *overlay.Manager        // New: native overlay window
+  overlayManager   *overlay.Manager        // Native overlay window
   trayIcon         *tray.TrayIcon
   config           *config.Config
   lastWidth, lastHeight int                // Tracked for persistence
   preCaptureWidth, preCaptureHeight int    // Pre-capture size
   preCaptureX, preCaptureY int             // Pre-capture position
   isCapturing      bool                    // Prevent resize during capture
-  isWindowHidden   bool                    // Track visibility state (new)
+  isWindowHidden   bool                    // Track visibility state (Phase 1: Added)
 }
 ```
 
@@ -319,17 +341,28 @@ SaveConfig(config)
 SetHotkey(mode, combo)
 
 // Utility
-MinimizeToTray()
+MinimizeToTray()        // Hide window to tray
 UpdateWindowSize(width, height)
+ShowWindow()            // Show from tray + refresh z-order
+OnBeforeClose()         // Handle close-to-tray setting
 ```
 
-**Lifecycle:**
-- `startup(ctx)` - Initialize overlay manager, hotkey manager, tray icon, load config
-- `shutdown(ctx)` - Cleanup overlay, hotkeys, tray; save window size
+**Lifecycle (Phase 1 Update):**
+- `startup(ctx)` - Load config, check MinimizeToTray flag, initialize managers, set initial isWindowHidden state
+- `shutdown(ctx)` - Save window size and state, cleanup overlay/hotkeys/tray
+
+**Window Visibility Tracking (Phase 1 - New):**
+`isWindowHidden` boolean tracks actual window state:
+- Initialized to `cfg.Startup.MinimizeToTray` at startup
+- Set `true` when MinimizeToTray(), WindowHide(), OnBeforeClose() called
+- Set `false` when ShowWindow(), tray.OnShow callback triggered
+- Prevents race conditions in async capture flow (region selection waits for hide)
+- Used in PrepareRegionCapture() to avoid double-hide on already-hidden windows
 
 **Notable Implementation Details:**
 - Overlay manager started before hotkey listener (native overlay takes priority)
-- Window visibility state tracked via `isWindowHidden` flag
+- StartHidden Wails option set from cfg.Startup.MinimizeToTray (Phase 1: Added to main.go)
+- Window visibility state tracks actual Wails window state, not just intent
 - SetAlwaysOnTop toggle refreshes window z-order when showing from tray
 - UpdateWindowSize skips updates during capture (preserves pre-capture dimensions)
 - Pre-capture position saved for window restoration after region selection
@@ -581,14 +614,19 @@ wails build -nsis           # Installer EXE
 
 | Metric | Value |
 |--------|-------|
-| Total Tokens | 58,044 |
-| Total Characters | 230,222 |
-| Total Files | 47 |
-| Go Files | 8 |
+| Total Tokens | ~60,000+ (Phase 1: Added tests) |
+| Total Characters | ~235,000+ |
+| Total Files | 49+ (Phase 1: +2 test files) |
+| Go Files | 10 (Phase 1: +2 test files) |
+| Test Files | 2 (Phase 1: New) |
 | TypeScript/React Files | 18 |
 | Configuration Files | 8 |
 | Binary Files | 1 (font) |
 | Top File | App.tsx (5,452 tokens) |
+
+**Phase 1 Additions:**
+- `app_test.go` - Test App struct and window visibility tracking
+- `internal/config/startup_test.go` - Test registry operations and path quoting
 
 ---
 
@@ -621,6 +659,23 @@ wails build -nsis           # Installer EXE
 
 - All file paths use forward slashes in code (cross-platform compatible)
 - Base64 PNG data transmitted as JSON strings between Go/React
-- No database - configs stored as JSON files
+- No database - configs stored as JSON files and Windows Registry (startup)
 - Windows-only (uses Win32 APIs extensively)
 - Frameless window with custom title bar (Vibrant Glassmorphism design)
+
+## Phase 1 - Startup & Autostart Fixes (Dec 24, 2025)
+
+**Overview:** Fixed Windows startup registry integration and added window visibility state tracking.
+
+**Changes:**
+1. **main.go** - Added StartHidden Wails option tied to cfg.Startup.MinimizeToTray
+2. **app.go** - Added isWindowHidden state tracking + removed timing hacks from region capture
+3. **internal/config/startup.go** - Fixed registry path quoting, added verification, improved error handling
+4. **Tests** - Created app_test.go and internal/config/startup_test.go for new functionality
+
+**Key Improvements:**
+- Executable paths with spaces now properly quoted in registry
+- Registry write verification prevents silent failures
+- Window visibility state prevents double-hide race conditions
+- Better error context for debugging startup issues
+- Comprehensive unit tests for registry operations
