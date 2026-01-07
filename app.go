@@ -23,6 +23,7 @@ import (
 	"winshot/internal/screenshot"
 	"winshot/internal/tray"
 	"winshot/internal/updater"
+	"winshot/internal/upload"
 	winEnum "winshot/internal/windows"
 )
 
@@ -41,6 +42,11 @@ type App struct {
 	preCaptureY      int  // Window Y position before capture
 	isCapturing      bool // Flag to prevent resize events during capture
 	isWindowHidden   bool // Track window visibility state
+
+	// Cloud upload
+	credManager    *upload.CredentialManager
+	r2Uploader     *upload.R2Uploader
+	gdriveUploader *upload.GDriveUploader
 }
 
 // NewApp creates a new App application struct
@@ -93,6 +99,17 @@ func (a *App) startup(ctx context.Context) {
 	if cfg.Startup.MinimizeToTray {
 		a.isWindowHidden = true
 	}
+
+	// Initialize cloud upload
+	a.credManager = upload.NewCredentialManager()
+	a.r2Uploader = upload.NewR2Uploader(a.credManager, &upload.R2Config{
+		AccountID: a.config.Cloud.R2.AccountID,
+		Bucket:    a.config.Cloud.R2.Bucket,
+		PublicURL: a.config.Cloud.R2.PublicURL,
+	})
+	a.gdriveUploader = upload.NewGDriveUploader(a.credManager, &upload.GDriveConfig{
+		FolderID: a.config.Cloud.GDrive.FolderID,
+	})
 }
 
 // shutdown is called when the app is closing
@@ -759,4 +776,160 @@ func (a *App) SaveEditorConfig(editor *config.EditorConfig) error {
 	}
 	a.config.Editor = *editor
 	return a.config.Save()
+}
+
+// ==================== Cloud Upload: R2 ====================
+
+// SaveR2Config saves R2 configuration (non-sensitive data)
+func (a *App) SaveR2Config(accountID, bucket, publicURL, directory string) error {
+	a.config.Cloud.R2.AccountID = accountID
+	a.config.Cloud.R2.Bucket = bucket
+	a.config.Cloud.R2.PublicURL = publicURL
+	a.config.Cloud.R2.Directory = directory
+
+	// Update uploader config
+	a.r2Uploader = upload.NewR2Uploader(a.credManager, &upload.R2Config{
+		AccountID: accountID,
+		Bucket:    bucket,
+		PublicURL: publicURL,
+		Directory: directory,
+	})
+
+	return a.config.Save()
+}
+
+// SaveR2Credentials saves R2 secrets to Windows Credential Manager
+func (a *App) SaveR2Credentials(accessKeyID, secretAccessKey string) error {
+	if err := a.credManager.Set(upload.CredR2AccessKeyID, accessKeyID); err != nil {
+		return err
+	}
+	return a.credManager.Set(upload.CredR2SecretAccessKey, secretAccessKey)
+}
+
+// GetR2Config returns R2 configuration
+func (a *App) GetR2Config() config.R2Config {
+	return a.config.Cloud.R2
+}
+
+// IsR2Configured checks if R2 is fully configured
+func (a *App) IsR2Configured() bool {
+	return a.r2Uploader.IsConfigured()
+}
+
+// TestR2Connection tests R2 connectivity
+func (a *App) TestR2Connection() error {
+	return a.r2Uploader.TestConnection()
+}
+
+// UploadToR2 uploads image to Cloudflare R2
+func (a *App) UploadToR2(imageData, filename string) (*upload.UploadResult, error) {
+	data, err := base64.StdEncoding.DecodeString(imageData)
+	if err != nil {
+		return &upload.UploadResult{Success: false, Error: "invalid image data"}, err
+	}
+	return a.r2Uploader.Upload(context.Background(), data, filename)
+}
+
+// ClearR2Credentials removes R2 credentials from Windows Credential Manager
+func (a *App) ClearR2Credentials() error {
+	a.credManager.Delete(upload.CredR2AccessKeyID)
+	a.credManager.Delete(upload.CredR2SecretAccessKey)
+	return nil
+}
+
+// ==================== Cloud Upload: Google Drive ====================
+
+// SaveGDriveCredentials saves Google OAuth client credentials to Credential Manager
+func (a *App) SaveGDriveCredentials(clientID, clientSecret string) error {
+	if err := a.credManager.Set(upload.CredGDriveClientID, clientID); err != nil {
+		return err
+	}
+	return a.credManager.Set(upload.CredGDriveClientSecret, clientSecret)
+}
+
+// SaveGDriveConfig saves Google Drive configuration (non-sensitive)
+func (a *App) SaveGDriveConfig(folderID string) error {
+	a.config.Cloud.GDrive.FolderID = folderID
+
+	// Update uploader config
+	a.gdriveUploader = upload.NewGDriveUploader(a.credManager, &upload.GDriveConfig{
+		FolderID: folderID,
+	})
+
+	return a.config.Save()
+}
+
+// GetGDriveConfig returns Google Drive configuration
+func (a *App) GetGDriveConfig() config.GDriveConfig {
+	return a.config.Cloud.GDrive
+}
+
+// HasGDriveCredentials checks if OAuth client credentials are configured
+func (a *App) HasGDriveCredentials() bool {
+	return a.credManager.Exists(upload.CredGDriveClientID) &&
+		a.credManager.Exists(upload.CredGDriveClientSecret)
+}
+
+// StartGDriveAuth initiates OAuth flow and returns auth URL
+func (a *App) StartGDriveAuth() (string, error) {
+	url, err := a.gdriveUploader.StartAuth()
+	if err != nil {
+		return "", err
+	}
+
+	// Open browser
+	runtime.BrowserOpenURL(a.ctx, url)
+
+	// Wait for callback in background
+	go func() {
+		if err := a.gdriveUploader.WaitForAuth(); err != nil {
+			runtime.EventsEmit(a.ctx, "gdrive:auth:error", err.Error())
+		} else {
+			runtime.EventsEmit(a.ctx, "gdrive:auth:success")
+		}
+	}()
+
+	return url, nil
+}
+
+// GDriveStatus represents the Google Drive connection status
+type GDriveStatus struct {
+	Connected bool   `json:"connected"`
+	Email     string `json:"email,omitempty"`
+}
+
+// IsGDriveConnected checks if Google Drive is connected and returns user email
+func (a *App) IsGDriveConnected() (bool, string, error) {
+	return a.gdriveUploader.IsConnected()
+}
+
+// GetGDriveStatus returns Google Drive connection status with email
+func (a *App) GetGDriveStatus() (*GDriveStatus, error) {
+	connected, email, err := a.gdriveUploader.IsConnected()
+	if err != nil {
+		return &GDriveStatus{Connected: false}, err
+	}
+	return &GDriveStatus{Connected: connected, Email: email}, nil
+}
+
+// DisconnectGDrive removes Google Drive authorization
+func (a *App) DisconnectGDrive() error {
+	return a.gdriveUploader.Disconnect()
+}
+
+// UploadToGDrive uploads image to Google Drive
+func (a *App) UploadToGDrive(imageData, filename string) (*upload.UploadResult, error) {
+	data, err := base64.StdEncoding.DecodeString(imageData)
+	if err != nil {
+		return &upload.UploadResult{Success: false, Error: "invalid image data"}, err
+	}
+	return a.gdriveUploader.Upload(context.Background(), data, filename)
+}
+
+// ClearGDriveCredentials removes all GDrive credentials from Windows Credential Manager
+func (a *App) ClearGDriveCredentials() error {
+	a.credManager.Delete(upload.CredGDriveClientID)
+	a.credManager.Delete(upload.CredGDriveClientSecret)
+	a.credManager.Delete(upload.CredGDriveToken)
+	return nil
 }

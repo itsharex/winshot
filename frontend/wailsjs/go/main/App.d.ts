@@ -5,6 +5,7 @@ import {updater} from '../models';
 import {config} from '../models';
 import {main} from '../models';
 import {windows} from '../models';
+import {upload} from '../models';
 
 export function CaptureDisplay(arg1:number):Promise<screenshot.CaptureResult>;
 
@@ -15,6 +16,12 @@ export function CaptureRegion(arg1:number,arg2:number,arg3:number,arg4:number):P
 export function CaptureWindow(arg1:number):Promise<screenshot.CaptureResult>;
 
 export function CheckForUpdate(arg1:string):Promise<updater.UpdateInfo>;
+
+export function ClearGDriveCredentials():Promise<void>;
+
+export function ClearR2Credentials():Promise<void>;
+
+export function DisconnectGDrive():Promise<void>;
 
 export function FinishRegionCapture():Promise<void>;
 
@@ -32,7 +39,13 @@ export function GetDisplayCount():Promise<number>;
 
 export function GetEditorConfig():Promise<config.EditorConfig>;
 
+export function GetGDriveConfig():Promise<config.GDriveConfig>;
+
+export function GetGDriveStatus():Promise<main.GDriveStatus>;
+
 export function GetHotkeyConfig():Promise<main.HotkeyConfig>;
+
+export function GetR2Config():Promise<config.R2Config>;
 
 export function GetSkippedVersion():Promise<string>;
 
@@ -43,6 +56,12 @@ export function GetWindowInfo(arg1:number):Promise<windows.WindowInfo>;
 export function GetWindowList():Promise<Array<windows.WindowInfo>>;
 
 export function GetWindowListWithThumbnails():Promise<Array<windows.WindowInfoWithThumbnail>>;
+
+export function HasGDriveCredentials():Promise<boolean>;
+
+export function IsGDriveConnected():Promise<boolean>;
+
+export function IsR2Configured():Promise<boolean>;
 
 export function MinimizeToTray():Promise<void>;
 
@@ -60,7 +79,15 @@ export function SaveConfig(arg1:config.Config):Promise<void>;
 
 export function SaveEditorConfig(arg1:config.EditorConfig):Promise<void>;
 
+export function SaveGDriveConfig(arg1:string):Promise<void>;
+
+export function SaveGDriveCredentials(arg1:string,arg2:string):Promise<void>;
+
 export function SaveImage(arg1:string,arg2:string):Promise<main.SaveImageResult>;
+
+export function SaveR2Config(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function SaveR2Credentials(arg1:string,arg2:string):Promise<void>;
 
 export function SelectFolder():Promise<string>;
 
@@ -68,4 +95,12 @@ export function SetSkippedVersion(arg1:string):Promise<void>;
 
 export function ShowWindow():Promise<void>;
 
+export function StartGDriveAuth():Promise<string>;
+
+export function TestR2Connection():Promise<void>;
+
 export function UpdateWindowSize(arg1:number,arg2:number):Promise<void>;
+
+export function UploadToGDrive(arg1:string,arg2:string):Promise<upload.UploadResult>;
+
+export function UploadToR2(arg1:string,arg2:string):Promise<upload.UploadResult>;
