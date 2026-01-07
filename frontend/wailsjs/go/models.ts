@@ -1,5 +1,65 @@
 export namespace config {
 	
+	export class GDriveConfig {
+	    folderId?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GDriveConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.folderId = source["folderId"];
+	    }
+	}
+	export class R2Config {
+	    accountId?: string;
+	    bucket?: string;
+	    publicUrl?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new R2Config(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accountId = source["accountId"];
+	        this.bucket = source["bucket"];
+	        this.publicUrl = source["publicUrl"];
+	    }
+	}
+	export class CloudConfig {
+	    r2?: R2Config;
+	    gdrive?: GDriveConfig;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.r2 = this.convertValues(source["r2"], R2Config);
+	        this.gdrive = this.convertValues(source["gdrive"], GDriveConfig);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class UpdateConfig {
 	    checkOnStartup: boolean;
 	    skippedVersion?: string;
@@ -124,6 +184,7 @@ export namespace config {
 	    window: WindowConfig;
 	    editor: EditorConfig;
 	    update: UpdateConfig;
+	    cloud?: CloudConfig;
 	    backgroundImages?: string[];
 	
 	    static createFrom(source: any = {}) {
@@ -139,6 +200,7 @@ export namespace config {
 	        this.window = this.convertValues(source["window"], WindowConfig);
 	        this.editor = this.convertValues(source["editor"], EditorConfig);
 	        this.update = this.convertValues(source["update"], UpdateConfig);
+	        this.cloud = this.convertValues(source["cloud"], CloudConfig);
 	        this.backgroundImages = source["backgroundImages"];
 	    }
 	
@@ -160,6 +222,8 @@ export namespace config {
 		    return a;
 		}
 	}
+	
+	
 	
 	
 	
@@ -333,6 +397,27 @@ export namespace updater {
 	        this.downloadUrl = source["downloadUrl"];
 	        this.releaseNotes = source["releaseNotes"];
 	        this.publishedAt = source["publishedAt"];
+	    }
+	}
+
+}
+
+export namespace upload {
+	
+	export class UploadResult {
+	    success: boolean;
+	    publicUrl: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UploadResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.publicUrl = source["publicUrl"];
+	        this.error = source["error"];
 	    }
 	}
 
