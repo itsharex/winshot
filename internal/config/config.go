@@ -57,6 +57,24 @@ type EditorConfig struct {
 	ShowBackground  bool   `json:"showBackground"`
 }
 
+// R2Config holds Cloudflare R2 settings (secrets stored in Credential Manager)
+type R2Config struct {
+	AccountID string `json:"accountId,omitempty"`
+	Bucket    string `json:"bucket,omitempty"`
+	PublicURL string `json:"publicUrl,omitempty"` // r2.dev or custom domain
+}
+
+// GDriveConfig holds Google Drive settings (OAuth tokens in Credential Manager)
+type GDriveConfig struct {
+	FolderID string `json:"folderId,omitempty"` // Optional upload folder ID
+}
+
+// CloudConfig holds cloud upload provider settings
+type CloudConfig struct {
+	R2     R2Config     `json:"r2,omitempty"`
+	GDrive GDriveConfig `json:"gdrive,omitempty"`
+}
+
 // Config holds all application settings
 type Config struct {
 	Hotkeys          HotkeyConfig    `json:"hotkeys"`
@@ -66,6 +84,7 @@ type Config struct {
 	Window           WindowConfig    `json:"window"`
 	Editor           EditorConfig    `json:"editor"`
 	Update           UpdateConfig    `json:"update"`
+	Cloud            CloudConfig     `json:"cloud,omitempty"`
 	BackgroundImages []string        `json:"backgroundImages,omitempty"`
 }
 
@@ -111,6 +130,10 @@ func Default() *Config {
 		Update: UpdateConfig{
 			CheckOnStartup: true,
 			SkippedVersion: "",
+		},
+		Cloud: CloudConfig{
+			R2:     R2Config{},
+			GDrive: GDriveConfig{},
 		},
 	}
 }
