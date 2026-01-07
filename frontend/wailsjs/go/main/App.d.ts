@@ -85,7 +85,7 @@ export function SaveGDriveCredentials(arg1:string,arg2:string):Promise<void>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<main.SaveImageResult>;
 
-export function SaveR2Config(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SaveR2Config(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SaveR2Credentials(arg1:string,arg2:string):Promise<void>;
 

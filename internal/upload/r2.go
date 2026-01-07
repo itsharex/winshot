@@ -27,6 +27,7 @@ type R2Config struct {
 	AccountID string `json:"accountId"`
 	Bucket    string `json:"bucket"`
 	PublicURL string `json:"publicUrl"`
+	Directory string `json:"directory,omitempty"` // Optional path prefix
 }
 
 // R2Uploader implements Uploader for Cloudflare R2.
@@ -133,10 +134,17 @@ func (r *R2Uploader) Upload(ctx context.Context, data []byte, filename string) (
 			}
 		}
 
+		// Build object key with optional directory prefix
+		objectKey := filename
+		if r.config.Directory != "" {
+			dir := strings.Trim(r.config.Directory, "/")
+			objectKey = dir + "/" + filename
+		}
+
 		uploadCtx, cancel := context.WithTimeout(ctx, r2UploadTimeout)
 		_, err = client.PutObject(uploadCtx, &s3.PutObjectInput{
 			Bucket:      aws.String(r.config.Bucket),
-			Key:         aws.String(filename),
+			Key:         aws.String(objectKey),
 			Body:        bytes.NewReader(data),
 			ContentType: aws.String(contentType),
 		})
@@ -144,8 +152,10 @@ func (r *R2Uploader) Upload(ctx context.Context, data []byte, filename string) (
 
 		if err == nil {
 			// Success - construct public URL with proper encoding
-			encodedFilename := url.PathEscape(filename)
-			publicURL := strings.TrimSuffix(r.config.PublicURL, "/") + "/" + encodedFilename
+			encodedKey := url.PathEscape(objectKey)
+			// Replace encoded slashes back to regular slashes for URL
+			encodedKey = strings.ReplaceAll(encodedKey, "%2F", "/")
+			publicURL := strings.TrimSuffix(r.config.PublicURL, "/") + "/" + encodedKey
 			return &UploadResult{Success: true, PublicURL: publicURL}, nil
 		}
 		lastErr = err

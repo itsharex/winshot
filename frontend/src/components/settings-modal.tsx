@@ -64,6 +64,7 @@ interface CloudLocalConfig {
     secretAccessKey: string;
     bucket: string;
     publicUrl: string;
+    directory: string;
   };
   gdrive: {
     clientId: string;
@@ -79,6 +80,7 @@ const defaultCloudConfig: CloudLocalConfig = {
     secretAccessKey: '',
     bucket: '',
     publicUrl: '',
+    directory: '',
   },
   gdrive: {
     clientId: '',
@@ -209,6 +211,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           accountId: r2Cfg.accountId || '',
           bucket: r2Cfg.bucket || '',
           publicUrl: r2Cfg.publicUrl || '',
+          directory: r2Cfg.directory || '',
         },
       }));
 
@@ -242,7 +245,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       await SaveR2Config(
         cloudConfig.r2.accountId,
         cloudConfig.r2.bucket,
-        cloudConfig.r2.publicUrl
+        cloudConfig.r2.publicUrl,
+        cloudConfig.r2.directory
       );
       await SaveR2Credentials(
         cloudConfig.r2.accessKeyId,
@@ -731,6 +735,18 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       setCloudConfig((prev) => ({
                         ...prev,
                         r2: { ...prev.r2, publicUrl: e.target.value },
+                      }))
+                    }
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-slate-200 text-sm placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Directory path (optional, e.g., screenshots)"
+                    value={cloudConfig.r2.directory}
+                    onChange={(e) =>
+                      setCloudConfig((prev) => ({
+                        ...prev,
+                        r2: { ...prev.r2, directory: e.target.value },
                       }))
                     }
                     className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-slate-200 text-sm placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50"

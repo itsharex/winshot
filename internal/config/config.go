@@ -62,6 +62,7 @@ type R2Config struct {
 	AccountID string `json:"accountId,omitempty"`
 	Bucket    string `json:"bucket,omitempty"`
 	PublicURL string `json:"publicUrl,omitempty"` // r2.dev or custom domain
+	Directory string `json:"directory,omitempty"` // Optional path prefix for uploads
 }
 
 // GDriveConfig holds Google Drive settings (OAuth tokens in Credential Manager)

@@ -781,16 +781,18 @@ func (a *App) SaveEditorConfig(editor *config.EditorConfig) error {
 // ==================== Cloud Upload: R2 ====================
 
 // SaveR2Config saves R2 configuration (non-sensitive data)
-func (a *App) SaveR2Config(accountID, bucket, publicURL string) error {
+func (a *App) SaveR2Config(accountID, bucket, publicURL, directory string) error {
 	a.config.Cloud.R2.AccountID = accountID
 	a.config.Cloud.R2.Bucket = bucket
 	a.config.Cloud.R2.PublicURL = publicURL
+	a.config.Cloud.R2.Directory = directory
 
 	// Update uploader config
 	a.r2Uploader = upload.NewR2Uploader(a.credManager, &upload.R2Config{
 		AccountID: accountID,
 		Bucket:    bucket,
 		PublicURL: publicURL,
+		Directory: directory,
 	})
 
 	return a.config.Save()

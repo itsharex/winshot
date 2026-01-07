@@ -158,8 +158,8 @@ export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
 }
 
-export function SaveR2Config(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SaveR2Config'](arg1, arg2, arg3);
+export function SaveR2Config(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveR2Config'](arg1, arg2, arg3, arg4);
 }
 
 export function SaveR2Credentials(arg1, arg2) {

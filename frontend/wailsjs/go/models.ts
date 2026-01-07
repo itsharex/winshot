@@ -16,6 +16,7 @@ export namespace config {
 	    accountId?: string;
 	    bucket?: string;
 	    publicUrl?: string;
+	    directory?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new R2Config(source);
@@ -26,6 +27,7 @@ export namespace config {
 	        this.accountId = source["accountId"];
 	        this.bucket = source["bucket"];
 	        this.publicUrl = source["publicUrl"];
+	        this.directory = source["directory"];
 	    }
 	}
 	export class CloudConfig {

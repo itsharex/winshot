@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ClipboardCopy, Download, Save, Link, Cloud, ChevronDown } from 'lucide-react';
+import { ClipboardCopy, Download, Save, Link, Cloud, ChevronUp } from 'lucide-react';
 
 interface ExportToolbarProps {
   onSave: (format: 'png' | 'jpeg') => void;
@@ -134,11 +134,11 @@ export function ExportToolbar({
           >
             <Cloud className="w-4 h-4" />
             Cloud
-            <ChevronDown className="w-3 h-3" />
+            <ChevronUp className="w-3 h-3" />
           </button>
 
           {showUploadMenu && (
-            <div className="absolute top-full left-0 mt-1 py-1 min-w-[160px] rounded-lg bg-slate-800/95 border border-white/10 shadow-xl z-50">
+            <div className="absolute bottom-full left-0 mb-1 py-1 min-w-[160px] rounded-lg bg-slate-800/95 border border-white/10 shadow-xl z-50">
               <button
                 onClick={() => {
                   onCloudUpload('r2');
