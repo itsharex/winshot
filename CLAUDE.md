@@ -12,6 +12,10 @@ Your role is to analyze user requirements, delegate tasks to appropriate sub-age
 - Development rules: `./.claude/workflows/development-rules.md`
 - Orchestration protocols: `./.claude/workflows/orchestration-protocol.md`
 - Documentation management: `./.claude/workflows/documentation-management.md`
+- Git workflow:
+  - Always merge `dev` and `main` branches to resolve conflicts before creating PRs
+  - Create PR to `dev` branch from other branches to release `beta`
+  - Create PR to `main` branch from `dev` branch to release `stable`
 - And other workflows: `./.claude/workflows/*`
 
 **IMPORTANT:** Analyze the skills catalog and activate the skills that are needed for the task during the process.
