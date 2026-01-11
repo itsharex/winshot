@@ -25,6 +25,8 @@ D:\www\winshot/
 │   │   ├── App.tsx                 # Central state management (24KB, 5,452 tokens)
 │   │   ├── main.tsx                # React entry point
 │   │   ├── types/index.ts          # TypeScript interfaces
+│   │   ├── utils/                  # Utility functions (Phase 2: Color extraction)
+│   │   │   └── extract-edge-color.ts
 │   │   ├── components/             # 14 React components
 │   │   │   ├── title-bar.tsx
 │   │   │   ├── capture-toolbar.tsx
@@ -444,6 +446,19 @@ Central state management and orchestration.
 - Keyboard shortcuts for all major operations (see Phase 3 section below)
 - JPEG quality configuration loaded from app config on startup
 
+### Utils: `utils/extract-edge-color.ts`
+**File:** extract-edge-color.ts (Phase 2 - Color Extraction)
+
+Color extraction utility for identifying dominant edge colors from screenshot images.
+
+**Features:**
+- Edge color extraction from image borders
+- Dominant color detection algorithm
+- Support for color normalization
+
+**Entry Points:**
+- `extractEdgeColor(imageData)` - Extract dominant color from image edges
+
 ### Components (13 total)
 
 **Toolbars (4 files):**
@@ -825,3 +840,28 @@ User presses Ctrl+V
 - Respects disabled state like main input field
 - Small font size (text-xs) for compact layout in hotkey form
 - Flex wrap allows responsive button layout on small screens
+
+---
+
+## Phase 2 - Color Extraction Utility (Jan 12, 2026)
+
+**Overview:** Created color extraction utility for identifying dominant edge colors from screenshot images.
+
+**Changes:**
+1. **frontend/src/utils/extract-edge-color.ts** - New color extraction utility (foundation for Phase 3+ features)
+
+**New Files:**
+- `frontend/src/utils/` folder created
+- `extract-edge-color.ts` - Color extraction algorithm with edge detection and normalization
+
+**Features:**
+- Edge color extraction from screenshot borders
+- Dominant color detection for palette analysis
+- Color normalization for consistent output
+
+**Purpose:** Foundation utility for future color-based features (auto-background selection, color grading, etc.)
+
+**Technical Details:**
+- Zero dependencies (vanilla TypeScript)
+- Pure function design for testability
+- Handles multiple color spaces and normalizations
