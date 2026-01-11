@@ -36,6 +36,7 @@ import {
 } from '../wailsjs/go/main/App';
 import { updater } from '../wailsjs/go/models';
 import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
+import { extractDominantEdgeColor } from './utils/extract-edge-color';
 
 // Default editor settings (used before Go config loads)
 const DEFAULT_EDITOR_SETTINGS = {
@@ -45,6 +46,8 @@ const DEFAULT_EDITOR_SETTINGS = {
   backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   outputRatio: 'auto' as OutputRatio,
   showBackground: true,
+  inset: 0,
+  autoBackground: true,
 };
 
 // Helper to parse ratio string into numeric ratio
@@ -135,6 +138,9 @@ function App() {
   const [backgroundColor, setBackgroundColor] = useState(DEFAULT_EDITOR_SETTINGS.backgroundColor);
   const [outputRatio, setOutputRatio] = useState<OutputRatio>(DEFAULT_EDITOR_SETTINGS.outputRatio);
   const [showBackground, setShowBackground] = useState(DEFAULT_EDITOR_SETTINGS.showBackground);
+  const [inset, setInset] = useState(DEFAULT_EDITOR_SETTINGS.inset);
+  const [autoBackground, setAutoBackground] = useState(DEFAULT_EDITOR_SETTINGS.autoBackground);
+  const [extractedColor, setExtractedColor] = useState<string | null>(null);
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   // Stores settings when background is hidden, so they can be restored
   const [savedBackgroundSettings, setSavedBackgroundSettings] = useState<{
@@ -222,6 +228,8 @@ function App() {
           if (cfg.backgroundColor) setBackgroundColor(cfg.backgroundColor);
           if (cfg.outputRatio) setOutputRatio(cfg.outputRatio as OutputRatio);
           if (cfg.showBackground !== undefined) setShowBackground(cfg.showBackground);
+          if (cfg.inset !== undefined) setInset(cfg.inset);
+          if (cfg.autoBackground !== undefined) setAutoBackground(cfg.autoBackground);
         }
       } catch (err) {
         console.error('Failed to load editor settings:', err);
@@ -234,10 +242,10 @@ function App() {
   // Persist editor settings to Go config when they change (after initial load)
   useEffect(() => {
     if (!editorSettingsLoaded) return;
-    SaveEditorConfig({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground }).catch(err => {
+    SaveEditorConfig({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, inset, autoBackground }).catch(err => {
       console.error('Failed to save editor settings:', err);
     });
-  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, editorSettingsLoaded]);
+  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, inset, autoBackground, editorSettingsLoaded]);
 
   // Load export settings from config on startup
   useEffect(() => {
@@ -313,6 +321,35 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // Auto-extract edge color when screenshot changes
+  useEffect(() => {
+    if (!screenshot) {
+      setExtractedColor(null);
+      return;
+    }
+
+    // Load image for color extraction
+    const img = new Image();
+    img.src = `data:image/png;base64,${screenshot.data}`;
+    img.onload = () => {
+      const color = extractDominantEdgeColor(img);
+      setExtractedColor(color);
+
+      // Apply auto-color if enabled
+      if (autoBackground) {
+        setBackgroundColor(color);
+      }
+    };
+  }, [screenshot]); // Intentionally exclude autoBackground to prevent re-extraction
+
+  // Handler for autoBackground toggle - apply extracted color when switching to auto
+  const handleAutoBackgroundChange = useCallback((auto: boolean) => {
+    setAutoBackground(auto);
+    if (auto && extractedColor) {
+      setBackgroundColor(extractedColor);
+    }
+  }, [extractedColor]);
 
   // Handle background visibility toggle
   const handleShowBackgroundChange = useCallback((show: boolean) => {
