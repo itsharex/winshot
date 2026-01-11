@@ -459,7 +459,7 @@ Central state management and orchestration.
 
 **Selectors (2 files):**
 - `window-picker.tsx` - Window enumeration + preview
-- `hotkey-input.tsx` - Custom hotkey binding UI
+- `hotkey-input.tsx` - Custom hotkey binding UI (Phase 01: Preset buttons for browser-blocked keys)
 - *(region-selector.tsx removed - replaced by native overlay)*
 
 **Canvas & Drawing (3 files):**
@@ -796,3 +796,32 @@ User presses Ctrl+V
 - Quality conversion: Wails canvas API uses 0-1 scale, so `jpegQuality / 100`
 - Config loaded on component mount via `useEffect` in GetConfig()
 - No config UI in Phase 3 (handled in Settings → Export backend)
+
+---
+
+## Phase 01 - Preset Buttons for Browser-Blocked Hotkeys (Jan 12, 2026)
+
+**Overview:** Added preset button UI to HotkeyInput component for easy assignment of PrintScreen-based hotkeys that browsers/WebView2 cannot capture directly.
+
+**Changes:**
+1. **frontend/src/components/hotkey-input.tsx** - Added preset buttons with HOTKEY_PRESETS constant
+
+**New Feature:**
+- `HOTKEY_PRESETS` constant defines 3 preset combinations:
+  - `PrintScreen` → label "PrtSc"
+  - `Ctrl+PrintScreen` → label "Ctrl+PrtSc"
+  - `Ctrl+Shift+PrintScreen` → label "Ctrl+Shift+PrtSc"
+- Preset buttons displayed below hotkey input field with text "or select preset:"
+- Button styling follows glassmorphism design:
+  - Inactive: `bg-white/5 text-slate-400 border-white/10` (light hover states)
+  - Active: `bg-violet-500/30 text-violet-300 border-violet-500/50` (purple highlight)
+  - Disabled: `opacity-50 cursor-not-allowed` (grayed out)
+- Click preset button → directly sets hotkey value (no need for keyboard input)
+- Solves browser blocking of PrintScreen key capture in frontend
+
+**Technical Details:**
+- Presets are static and non-configurable (covers common use cases)
+- Button click calls `onChange(preset.value)` directly
+- Respects disabled state like main input field
+- Small font size (text-xs) for compact layout in hotkey form
+- Flex wrap allows responsive button layout on small screens
