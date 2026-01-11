@@ -149,43 +149,65 @@ Stage (containerWidth x containerHeight)
 ```
 App.tsx
 ├── State: cropMode, cropArea, cropAspectRatio, isDrawingCrop, appliedCrop
+├── State: inset (0-50%), autoBackground (true/false), extractedColor
 ├── Handlers: handleCropToolSelect, handleCropChange, handleCropApply, etc.
 │
-└── editor-canvas.tsx (kebab-case filename)
-    ├── Props: cropMode, cropArea, cropAspectRatio, isDrawingCrop, appliedCrop
-    ├── Props: onCropChange, onCropStart, onDrawingCropChange
-    ├── Local State: scale, panOffset, isPanning, isDrawing (for annotations)
-    ├── Local State: baseScale, userZoom, spacePressed
+├── editor-canvas.tsx (kebab-case filename)
+│   ├── Props: cropMode, cropArea, cropAspectRatio, isDrawingCrop, appliedCrop
+│   ├── Props: onCropChange, onCropStart, onDrawingCropChange
+│   ├── Local State: scale, panOffset, isPanning, isDrawing (for annotations)
+│   ├── Local State: baseScale, userZoom, spacePressed
+│   │
+│   ├── Calculated Values:
+│   │   ├── totalWidth/Height (canvas dimensions via calculateOutputDimensions)
+│   │   ├── actualPaddingX/Y (image offset - centered)
+│   │   └── innerWidth/Height (displayed image size preserving aspect ratio)
+│   │
+│   └── crop-overlay.tsx (kebab-case filename, rendered when cropMode=true)
+│       ├── Props: imageX, imageY, imageWidth, imageHeight (= actualPadding, inner)
+│       ├── Props: cropArea, aspectRatio, isDrawing (NOTE: scale NOT passed)
+│       ├── Props: onCropChange, onCropStart, onDrawingChange
+│       ├── Uses: stage.getRelativePointerPosition() for coordinate conversion
+│       │
+│       ├── Local State: dragMode ('none' | 'drawing' | 'moving' | HandlePosition)
+│       ├── Refs: dragStartRef, drawStartRef (for manual drag tracking)
+│       │
+│       ├── DarkenedOverlay (inline sub-component)
+│       │   └── 4 Rects covering area outside crop region (listening=false)
+│       │
+│       ├── CropFrame (inline Rect - NOT draggable)
+│       │   └── Border rect for moving crop region (manual drag via refs)
+│       │
+│       └── ResizeHandles (inline Rects - NOT draggable)
+│           └── 8 handle rects for resizing (manual drag via refs)
+│
+└── settings-panel.tsx (RIGHT SIDEBAR)
+    ├── Props: padding, cornerRadius, shadowSize, backgroundColor, outputRatio
+    ├── Props: showBackground, imageWidth, imageHeight
+    ├── Props: inset, autoBackground, extractedColor (NEW - Phase 3)
+    ├── Props: onInsetChange, onAutoBackgroundChange (NEW - Phase 3 callbacks)
+    ├── Props: onPaddingChange, onCornerRadiusChange, onShadowSizeChange, etc.
     │
-    ├── Calculated Values:
-    │   ├── totalWidth/Height (canvas dimensions via calculateOutputDimensions)
-    │   ├── actualPaddingX/Y (image offset - centered)
-    │   └── innerWidth/Height (displayed image size preserving aspect ratio)
+    ├── UI Controls (Phase 3 Additions):
+    │   ├── Inset Slider (0-50%) - Controls background inset/shrink
+    │   │   └── Disabled when showBackground=false (opacity-50, pointer-events-none)
+    │   │
+    │   └── Auto/Manual Toggle - Two-button group
+    │       ├── Auto: Uses extractedColor from dominant edge
+    │       └── Manual: Allows gradient/color/image selection
     │
-    └── crop-overlay.tsx (kebab-case filename, rendered when cropMode=true)
-        ├── Props: imageX, imageY, imageWidth, imageHeight (= actualPadding, inner)
-        ├── Props: cropArea, aspectRatio, isDrawing (NOTE: scale NOT passed)
-        ├── Props: onCropChange, onCropStart, onDrawingChange
-        ├── Uses: stage.getRelativePointerPosition() for coordinate conversion
-        │
-        ├── Local State: dragMode ('none' | 'drawing' | 'moving' | HandlePosition)
-        ├── Refs: dragStartRef, drawStartRef (for manual drag tracking)
-        │
-        ├── DarkenedOverlay (inline sub-component)
-        │   └── 4 Rects covering area outside crop region (listening=false)
-        │
-        ├── CropFrame (inline Rect - NOT draggable)
-        │   └── Border rect for moving crop region (manual drag via refs)
-        │
-        └── ResizeHandles (inline Rects - NOT draggable)
-            └── 8 handle rects for resizing (manual drag via refs)
+    └── Background Controls:
+        ├── Gradient Presets (24 options)
+        ├── Custom Color Picker
+        ├── Image Background Gallery + Upload
+        └── All disabled when autoBackground=true or showBackground=false
 ```
 
 ---
 
 ## State Management
 
-### Crop-Related State in App.tsx
+### Editor Settings State in App.tsx
 
 ```typescript
 // Crop state
@@ -194,6 +216,11 @@ const [cropArea, setCropArea] = useState<CropArea | null>(null);  // Current reg
 const [cropAspectRatio, setCropAspectRatio] = useState<CropAspectRatio>('free');
 const [isDrawingCrop, setIsDrawingCrop] = useState(false); // Drawing new region?
 const [appliedCrop, setAppliedCrop] = useState<CropArea | null>(null); // For export
+
+// Background & display settings (Phase 3 - UI Controls)
+const [inset, setInset] = useState(0);              // Background inset % (0-50)
+const [autoBackground, setAutoBackground] = useState(true);  // Auto/Manual mode
+const [extractedColor, setExtractedColor] = useState<string | null>(null); // Dominant edge color
 
 // CropArea interface
 interface CropArea {
@@ -208,6 +235,10 @@ interface CropArea {
 onCropChange={handleCropChange}       // Updates cropArea state
 onCropStart={handleCropChange}        // SAME callback - no distinction
 onDrawingCropChange={setIsDrawingCrop}
+
+// Background control callbacks (Phase 3)
+onInsetChange={setInset}              // Range: 0-50%
+onAutoBackgroundChange={handleAutoBackgroundChange}  // Toggle auto vs manual
 ```
 
 ### State Flow
