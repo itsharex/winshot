@@ -22,6 +22,18 @@ export function CheckForUpdate(arg1) {
   return window['go']['main']['App']['CheckForUpdate'](arg1);
 }
 
+export function ClearGDriveCredentials() {
+  return window['go']['main']['App']['ClearGDriveCredentials']();
+}
+
+export function ClearR2Credentials() {
+  return window['go']['main']['App']['ClearR2Credentials']();
+}
+
+export function DisconnectGDrive() {
+  return window['go']['main']['App']['DisconnectGDrive']();
+}
+
 export function FinishRegionCapture() {
   return window['go']['main']['App']['FinishRegionCapture']();
 }
@@ -54,8 +66,20 @@ export function GetEditorConfig() {
   return window['go']['main']['App']['GetEditorConfig']();
 }
 
+export function GetGDriveConfig() {
+  return window['go']['main']['App']['GetGDriveConfig']();
+}
+
+export function GetGDriveStatus() {
+  return window['go']['main']['App']['GetGDriveStatus']();
+}
+
 export function GetHotkeyConfig() {
   return window['go']['main']['App']['GetHotkeyConfig']();
+}
+
+export function GetR2Config() {
+  return window['go']['main']['App']['GetR2Config']();
 }
 
 export function GetSkippedVersion() {
@@ -76,6 +100,18 @@ export function GetWindowList() {
 
 export function GetWindowListWithThumbnails() {
   return window['go']['main']['App']['GetWindowListWithThumbnails']();
+}
+
+export function HasGDriveCredentials() {
+  return window['go']['main']['App']['HasGDriveCredentials']();
+}
+
+export function IsGDriveConnected() {
+  return window['go']['main']['App']['IsGDriveConnected']();
+}
+
+export function IsR2Configured() {
+  return window['go']['main']['App']['IsR2Configured']();
 }
 
 export function MinimizeToTray() {
@@ -110,8 +146,24 @@ export function SaveEditorConfig(arg1) {
   return window['go']['main']['App']['SaveEditorConfig'](arg1);
 }
 
+export function SaveGDriveConfig(arg1) {
+  return window['go']['main']['App']['SaveGDriveConfig'](arg1);
+}
+
+export function SaveGDriveCredentials(arg1, arg2) {
+  return window['go']['main']['App']['SaveGDriveCredentials'](arg1, arg2);
+}
+
 export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
+}
+
+export function SaveR2Config(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveR2Config'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveR2Credentials(arg1, arg2) {
+  return window['go']['main']['App']['SaveR2Credentials'](arg1, arg2);
 }
 
 export function SelectFolder() {
@@ -126,6 +178,22 @@ export function ShowWindow() {
   return window['go']['main']['App']['ShowWindow']();
 }
 
+export function StartGDriveAuth() {
+  return window['go']['main']['App']['StartGDriveAuth']();
+}
+
+export function TestR2Connection() {
+  return window['go']['main']['App']['TestR2Connection']();
+}
+
 export function UpdateWindowSize(arg1, arg2) {
   return window['go']['main']['App']['UpdateWindowSize'](arg1, arg2);
+}
+
+export function UploadToGDrive(arg1, arg2) {
+  return window['go']['main']['App']['UploadToGDrive'](arg1, arg2);
+}
+
+export function UploadToR2(arg1, arg2) {
+  return window['go']['main']['App']['UploadToR2'](arg1, arg2);
 }

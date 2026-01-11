@@ -29,9 +29,14 @@ import {
   GetClipboardImage,
   CheckForUpdate,
   GetSkippedVersion,
+  IsR2Configured,
+  GetGDriveStatus,
+  UploadToR2,
+  UploadToGDrive,
 } from '../wailsjs/go/main/App';
 import { updater } from '../wailsjs/go/models';
 import { EventsOn, EventsOff, WindowGetSize } from '../wailsjs/runtime/runtime';
+import { extractDominantEdgeColor } from './utils/extract-edge-color';
 
 // Default editor settings (used before Go config loads)
 const DEFAULT_EDITOR_SETTINGS = {
@@ -41,6 +46,8 @@ const DEFAULT_EDITOR_SETTINGS = {
   backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   outputRatio: 'auto' as OutputRatio,
   showBackground: true,
+  inset: 0,
+  autoBackground: true,
 };
 
 // Helper to parse ratio string into numeric ratio
@@ -131,6 +138,9 @@ function App() {
   const [backgroundColor, setBackgroundColor] = useState(DEFAULT_EDITOR_SETTINGS.backgroundColor);
   const [outputRatio, setOutputRatio] = useState<OutputRatio>(DEFAULT_EDITOR_SETTINGS.outputRatio);
   const [showBackground, setShowBackground] = useState(DEFAULT_EDITOR_SETTINGS.showBackground);
+  const [inset, setInset] = useState(DEFAULT_EDITOR_SETTINGS.inset);
+  const [autoBackground, setAutoBackground] = useState(DEFAULT_EDITOR_SETTINGS.autoBackground);
+  const [extractedColor, setExtractedColor] = useState<string | null>(null);
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   // Stores settings when background is hidden, so they can be restored
   const [savedBackgroundSettings, setSavedBackgroundSettings] = useState<{
@@ -200,6 +210,12 @@ function App() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<updater.UpdateInfo | null>(null);
 
+  // Cloud upload state
+  const [isR2Configured, setIsR2Configured] = useState(false);
+  const [isGDriveConnected, setIsGDriveConnected] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
   // Load editor settings from Go config on startup
   useEffect(() => {
     const loadEditorSettings = async () => {
@@ -212,6 +228,8 @@ function App() {
           if (cfg.backgroundColor) setBackgroundColor(cfg.backgroundColor);
           if (cfg.outputRatio) setOutputRatio(cfg.outputRatio as OutputRatio);
           if (cfg.showBackground !== undefined) setShowBackground(cfg.showBackground);
+          if (cfg.inset !== undefined) setInset(cfg.inset);
+          if (cfg.autoBackground !== undefined) setAutoBackground(cfg.autoBackground);
         }
       } catch (err) {
         console.error('Failed to load editor settings:', err);
@@ -224,10 +242,10 @@ function App() {
   // Persist editor settings to Go config when they change (after initial load)
   useEffect(() => {
     if (!editorSettingsLoaded) return;
-    SaveEditorConfig({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground }).catch(err => {
+    SaveEditorConfig({ padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, inset, autoBackground }).catch(err => {
       console.error('Failed to save editor settings:', err);
     });
-  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, editorSettingsLoaded]);
+  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, inset, autoBackground, editorSettingsLoaded]);
 
   // Load export settings from config on startup
   useEffect(() => {
@@ -271,6 +289,67 @@ function App() {
     const timer = setTimeout(checkForUpdates, 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Check cloud configuration on mount and after settings change
+  const checkCloudConfig = useCallback(async () => {
+    try {
+      const r2 = await IsR2Configured();
+      setIsR2Configured(r2);
+
+      const status = await GetGDriveStatus();
+      setIsGDriveConnected(status.connected);
+    } catch (err) {
+      console.error('Failed to check cloud config:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkCloudConfig();
+  }, [checkCloudConfig]);
+
+  // Re-check cloud config when settings modal closes
+  useEffect(() => {
+    if (!showSettings) {
+      checkCloudConfig();
+    }
+  }, [showSettings, checkCloudConfig]);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Auto-extract edge color when screenshot changes
+  useEffect(() => {
+    if (!screenshot) {
+      setExtractedColor(null);
+      return;
+    }
+
+    // Load image for color extraction
+    const img = new Image();
+    img.src = `data:image/png;base64,${screenshot.data}`;
+    img.onload = () => {
+      const color = extractDominantEdgeColor(img);
+      setExtractedColor(color);
+
+      // Apply auto-color if enabled
+      if (autoBackground) {
+        setBackgroundColor(color);
+      }
+    };
+  }, [screenshot]); // Intentionally exclude autoBackground to prevent re-extraction
+
+  // Handler for autoBackground toggle - apply extracted color when switching to auto
+  const handleAutoBackgroundChange = useCallback((auto: boolean) => {
+    setAutoBackground(auto);
+    if (auto && extractedColor) {
+      setBackgroundColor(extractedColor);
+    }
+  }, [extractedColor]);
 
   // Handle background visibility toggle
   const handleShowBackgroundChange = useCallback((show: boolean) => {
@@ -1001,6 +1080,10 @@ function App() {
       outputRatio
     );
 
+    // Hide all Transformer nodes before export (selection handles)
+    const transformers = stage.find('Transformer');
+    transformers.forEach((tr) => tr.hide());
+
     // Save current stage properties
     const oldScaleX = stage.scaleX();
     const oldScaleY = stage.scaleY();
@@ -1029,6 +1112,9 @@ function App() {
     stage.scaleY(oldScaleY);
     stage.x(oldX);
     stage.y(oldY);
+
+    // Restore Transformer visibility
+    transformers.forEach((tr) => tr.show());
 
     return dataUrl;
   }, [screenshot, padding, outputRatio, jpegQuality]);
@@ -1121,6 +1207,60 @@ function App() {
     }
   }, [lastSavedPath]);
 
+  // Cloud upload handler
+  const handleCloudUpload = useCallback(async (provider: 'r2' | 'gdrive') => {
+    if (!screenshot) return;
+
+    const dataUrl = getCanvasDataUrl('png');
+    if (!dataUrl) {
+      setToast({ message: 'Upload failed: No canvas available', type: 'error' });
+      return;
+    }
+
+    setIsUploading(true);
+    setStatusMessage('Uploading...');
+
+    try {
+      // Generate filename
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filename = `winshot_${timestamp}.png`;
+
+      // Get base64 data
+      const base64Data = dataUrl.split(',')[1];
+
+      // Upload
+      let result;
+      if (provider === 'r2') {
+        result = await UploadToR2(base64Data, filename);
+      } else {
+        result = await UploadToGDrive(base64Data, filename);
+      }
+
+      if (result.success) {
+        // Copy URL to clipboard
+        try {
+          await navigator.clipboard.writeText(result.publicUrl);
+          setToast({ message: 'Uploaded! URL copied to clipboard', type: 'success' });
+        } catch {
+          // Clipboard failed, still show success with URL
+          setToast({ message: `Uploaded! ${result.publicUrl}`, type: 'success' });
+        }
+        setStatusMessage(`Uploaded to ${provider === 'r2' ? 'R2' : 'Google Drive'}`);
+      } else {
+        setToast({ message: `Upload failed: ${result.error}`, type: 'error' });
+        setStatusMessage('Upload failed');
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      setToast({ message: `Upload error: ${errorMsg}`, type: 'error' });
+      setStatusMessage('Upload failed');
+    }
+
+    setIsUploading(false);
+    setTimeout(() => setStatusMessage(undefined), 3000);
+  }, [screenshot, getCanvasDataUrl]);
+
   // Helper to copy styled canvas to clipboard (used by auto-copy and manual copy)
   const copyStyledCanvasToClipboard = useCallback(async (): Promise<boolean> => {
     const stage = stageRef.current;
@@ -1134,6 +1274,10 @@ function App() {
         padding,
         outputRatio
       );
+
+      // Hide all Transformer nodes before export (selection handles)
+      const transformers = stage.find('Transformer');
+      transformers.forEach((tr) => tr.hide());
 
       // Save current stage properties
       const oldScaleX = stage.scaleX();
@@ -1161,6 +1305,9 @@ function App() {
       stage.scaleY(oldScaleY);
       stage.x(oldX);
       stage.y(oldY);
+
+      // Restore Transformer visibility
+      transformers.forEach((tr) => tr.show());
 
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(resolve, 'image/png');
@@ -1361,6 +1508,8 @@ function App() {
           shadowSize={shadowSize}
           backgroundColor={backgroundColor}
           outputRatio={outputRatio}
+          inset={inset}
+          insetBackgroundColor={extractedColor ?? undefined}
           stageRef={stageRef}
           activeTool={activeTool}
           annotations={annotations}
@@ -1394,12 +1543,17 @@ function App() {
             showBackground={showBackground}
             imageWidth={screenshot.width}
             imageHeight={screenshot.height}
+            inset={inset}
+            autoBackground={autoBackground}
+            extractedColor={extractedColor}
             onPaddingChange={setPadding}
             onCornerRadiusChange={setCornerRadius}
             onShadowSizeChange={setShadowSize}
             onBackgroundChange={setBackgroundColor}
             onOutputRatioChange={setOutputRatio}
             onShowBackgroundChange={handleShowBackgroundChange}
+            onInsetChange={setInset}
+            onAutoBackgroundChange={handleAutoBackgroundChange}
           />
         )}
       </div>
@@ -1410,8 +1564,12 @@ function App() {
           onQuickSave={handleQuickSave}
           onCopyToClipboard={handleCopyToClipboard}
           onCopyPath={handleCopyPath}
+          onCloudUpload={handleCloudUpload}
           lastSavedPath={lastSavedPath}
           isExporting={isExporting}
+          isR2Configured={isR2Configured}
+          isGDriveConnected={isGDriveConnected}
+          isUploading={isUploading}
         />
       )}
 
@@ -1433,6 +1591,24 @@ function App() {
         onClose={() => setShowUpdateModal(false)}
         updateInfo={updateInfo}
       />
+
+      {/* Toast notification for cloud upload */}
+      {toast && (
+        <div
+          className={`fixed bottom-4 right-4 px-4 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2 max-w-md
+                      ${toast.type === 'success'
+                        ? 'bg-emerald-500/90 text-white'
+                        : 'bg-rose-500/90 text-white'}`}
+        >
+          <span className="text-sm font-medium">{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 p-1 rounded-lg hover:bg-white/20 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
