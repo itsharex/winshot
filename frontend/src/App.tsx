@@ -1527,12 +1527,17 @@ function App() {
             showBackground={showBackground}
             imageWidth={screenshot.width}
             imageHeight={screenshot.height}
+            inset={inset}
+            autoBackground={autoBackground}
+            extractedColor={extractedColor}
             onPaddingChange={setPadding}
             onCornerRadiusChange={setCornerRadius}
             onShadowSizeChange={setShadowSize}
             onBackgroundChange={setBackgroundColor}
             onOutputRatioChange={setOutputRatio}
             onShowBackgroundChange={handleShowBackgroundChange}
+            onInsetChange={setInset}
+            onAutoBackgroundChange={handleAutoBackgroundChange}
           />
         )}
       </div>
