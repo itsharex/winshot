@@ -792,7 +792,15 @@ export function EditorCanvas({
                 shadowEnabled={shadowSize > 0}
               />
 
-              {/* Border rect - rendered above shadow, below image */}
+              {/* Screenshot image (scaled down to fit within padding) */}
+              <ScreenshotImage
+                src={imageSrc}
+                cornerRadius={cornerRadius}
+                displayWidth={innerWidth}
+                displayHeight={innerHeight}
+              />
+
+              {/* Border rect - rendered above image */}
               {borderEnabled && borderWeight > 0 && (() => {
                 // Calculate border offset based on type: outside (-0.5), center (0), inside (+0.5)
                 const offsetMultiplier = borderType === 'outside' ? -1 : borderType === 'inside' ? 1 : 0;
@@ -811,14 +819,6 @@ export function EditorCanvas({
                   />
                 );
               })()}
-
-              {/* Screenshot image (scaled down to fit within padding) */}
-              <ScreenshotImage
-                src={imageSrc}
-                cornerRadius={cornerRadius}
-                displayWidth={innerWidth}
-                displayHeight={innerHeight}
-              />
             </Group>
 
             {/* Annotations */}
