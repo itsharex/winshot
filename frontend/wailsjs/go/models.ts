@@ -87,11 +87,16 @@ export namespace config {
 	    autoBackground: boolean;
 	    insetBackgroundColor?: string;
 	    shapeCornerRadius: number;
-	
+	    borderEnabled: boolean;
+	    borderWeight: number;
+	    borderColor: string;
+	    borderOpacity: number;
+	    borderType: string;
+
 	    static createFrom(source: any = {}) {
 	        return new EditorConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.padding = source["padding"];
@@ -104,6 +109,11 @@ export namespace config {
 	        this.autoBackground = source["autoBackground"];
 	        this.insetBackgroundColor = source["insetBackgroundColor"];
 	        this.shapeCornerRadius = source["shapeCornerRadius"];
+	        this.borderEnabled = source["borderEnabled"];
+	        this.borderWeight = source["borderWeight"];
+	        this.borderColor = source["borderColor"];
+	        this.borderOpacity = source["borderOpacity"];
+	        this.borderType = source["borderType"];
 	    }
 	}
 	export class WindowConfig {
