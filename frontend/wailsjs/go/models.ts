@@ -92,11 +92,11 @@ export namespace config {
 	    borderColor: string;
 	    borderOpacity: number;
 	    borderType: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EditorConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.padding = source["padding"];

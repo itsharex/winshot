@@ -805,6 +805,8 @@ export function EditorCanvas({
                 // Calculate border offset based on type: outside (-0.5), center (0), inside (+0.5)
                 const offsetMultiplier = borderType === 'outside' ? -1 : borderType === 'inside' ? 1 : 0;
                 const offset = (borderWeight / 2) * offsetMultiplier;
+                // Adjust corner radius to match image's curve when border is offset
+                const borderCornerRadius = Math.max(0, cornerRadius - offset);
                 return (
                   <Rect
                     x={offset}
@@ -813,7 +815,7 @@ export function EditorCanvas({
                     height={innerHeight - offset * 2}
                     stroke={borderColor}
                     strokeWidth={borderWeight}
-                    cornerRadius={cornerRadius}
+                    cornerRadius={borderCornerRadius}
                     opacity={borderOpacity / 100}
                     listening={false}
                   />
