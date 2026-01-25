@@ -59,6 +59,11 @@ type EditorConfig struct {
 	AutoBackground       bool   `json:"autoBackground"`                 // Auto-extract edge color for background
 	InsetBackgroundColor string `json:"insetBackgroundColor,omitempty"` // Custom inset background color
 	ShapeCornerRadius    int    `json:"shapeCornerRadius"`              // Default corner radius for rectangle annotations (0-50)
+	BorderEnabled        bool   `json:"borderEnabled"`                  // Enable/disable screenshot border
+	BorderWeight         int    `json:"borderWeight"`                   // Border stroke width in pixels (1-50)
+	BorderColor          string `json:"borderColor"`                    // Border color hex code
+	BorderOpacity        int    `json:"borderOpacity"`                  // Border opacity percentage (0-100)
+	BorderType           string `json:"borderType"`                     // Border position: outside, center, inside
 }
 
 // R2Config holds Cloudflare R2 settings (secrets stored in Credential Manager)
@@ -134,6 +139,11 @@ func Default() *Config {
 			Inset:             0,
 			AutoBackground:    true,
 			ShapeCornerRadius: 0,
+			BorderEnabled:     false,
+			BorderWeight:      2,
+			BorderColor:       "#000000",
+			BorderOpacity:     100,
+			BorderType:        "center",
 		},
 		Update: UpdateConfig{
 			CheckOnStartup: true,

@@ -13,7 +13,7 @@ import { StatusBar } from './components/status-bar';
 import { AnnotationToolbar } from './components/annotation-toolbar';
 import { ExportToolbar } from './components/export-toolbar';
 import { CropToolbar } from './components/crop-toolbar';
-import { CaptureResult, CaptureMode, WindowInfo, Annotation, EditorTool, OutputRatio, CropArea, CropAspectRatio, CropState, LibraryImage } from './types';
+import { CaptureResult, CaptureMode, WindowInfo, Annotation, EditorTool, OutputRatio, CropArea, CropAspectRatio, CropState, BorderType, LibraryImage } from './types';
 import {
   CaptureFullscreen,
   CaptureWindow,
@@ -50,6 +50,11 @@ const DEFAULT_EDITOR_SETTINGS = {
   showBackground: true,
   inset: 0,
   autoBackground: true,
+  borderEnabled: false,
+  borderWeight: 2,
+  borderColor: '#000000',
+  borderOpacity: 100,
+  borderType: 'center' as BorderType,
 };
 
 // Helper to parse ratio string into numeric ratio
@@ -145,6 +150,11 @@ function App() {
   const [autoBackground, setAutoBackground] = useState(DEFAULT_EDITOR_SETTINGS.autoBackground);
   const [extractedColor, setExtractedColor] = useState<string | null>(null);
   const [insetBackgroundColor, setInsetBackgroundColor] = useState<string | null>(null);
+  const [borderEnabled, setBorderEnabled] = useState(DEFAULT_EDITOR_SETTINGS.borderEnabled);
+  const [borderWeight, setBorderWeight] = useState(DEFAULT_EDITOR_SETTINGS.borderWeight);
+  const [borderColor, setBorderColor] = useState(DEFAULT_EDITOR_SETTINGS.borderColor);
+  const [borderOpacity, setBorderOpacity] = useState(DEFAULT_EDITOR_SETTINGS.borderOpacity);
+  const [borderType, setBorderType] = useState<BorderType>(DEFAULT_EDITOR_SETTINGS.borderType);
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   // Stores settings when background is hidden, so they can be restored
   const [savedBackgroundSettings, setSavedBackgroundSettings] = useState<{
@@ -238,6 +248,11 @@ function App() {
           if (cfg.autoBackground !== undefined) setAutoBackground(cfg.autoBackground);
           if (cfg.insetBackgroundColor) setInsetBackgroundColor(cfg.insetBackgroundColor);
           if (cfg.shapeCornerRadius !== undefined) setShapeCornerRadius(cfg.shapeCornerRadius);
+          if (cfg.borderEnabled !== undefined) setBorderEnabled(cfg.borderEnabled);
+          if (cfg.borderWeight !== undefined) setBorderWeight(cfg.borderWeight);
+          if (cfg.borderColor) setBorderColor(cfg.borderColor);
+          if (cfg.borderOpacity !== undefined) setBorderOpacity(cfg.borderOpacity);
+          if (cfg.borderType) setBorderType(cfg.borderType as BorderType);
         }
       } catch (err) {
         console.error('Failed to load editor settings:', err);
@@ -261,10 +276,15 @@ function App() {
       autoBackground,
       insetBackgroundColor: insetBackgroundColor || undefined,
       shapeCornerRadius,
+      borderEnabled,
+      borderWeight,
+      borderColor,
+      borderOpacity,
+      borderType,
     }).catch(err => {
       console.error('Failed to save editor settings:', err);
     });
-  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, inset, autoBackground, insetBackgroundColor, shapeCornerRadius, editorSettingsLoaded]);
+  }, [padding, cornerRadius, shadowSize, backgroundColor, outputRatio, showBackground, inset, autoBackground, insetBackgroundColor, shapeCornerRadius, borderEnabled, borderWeight, borderColor, borderOpacity, borderType, editorSettingsLoaded]);
 
   // Load export settings from config on startup
   useEffect(() => {
@@ -1617,6 +1637,11 @@ function App() {
           outputRatio={outputRatio}
           inset={inset}
           insetBackgroundColor={insetBackgroundColor ?? extractedColor ?? undefined}
+          borderEnabled={borderEnabled}
+          borderWeight={borderWeight}
+          borderColor={borderColor}
+          borderOpacity={borderOpacity}
+          borderType={borderType}
           stageRef={stageRef}
           activeTool={activeTool}
           annotations={annotations}
@@ -1656,6 +1681,11 @@ function App() {
             autoBackground={autoBackground}
             extractedColor={extractedColor}
             insetBackgroundColor={insetBackgroundColor}
+            borderEnabled={borderEnabled}
+            borderWeight={borderWeight}
+            borderColor={borderColor}
+            borderOpacity={borderOpacity}
+            borderType={borderType}
             onPaddingChange={setPadding}
             onCornerRadiusChange={setCornerRadius}
             onShadowSizeChange={setShadowSize}
@@ -1665,6 +1695,11 @@ function App() {
             onInsetChange={setInset}
             onAutoBackgroundChange={handleAutoBackgroundChange}
             onInsetBackgroundColorChange={setInsetBackgroundColor}
+            onBorderEnabledChange={setBorderEnabled}
+            onBorderWeightChange={setBorderWeight}
+            onBorderColorChange={setBorderColor}
+            onBorderOpacityChange={setBorderOpacity}
+            onBorderTypeChange={setBorderType}
           />
         )}
       </div>

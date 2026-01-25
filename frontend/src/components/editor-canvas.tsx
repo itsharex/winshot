@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Group } from 'react-konva';
 import useImage from 'use-image';
 import Konva from 'konva';
-import { CaptureResult, Annotation, AnnotationType, EditorTool, OutputRatio, CropArea, CropAspectRatio } from '../types';
+import { CaptureResult, Annotation, AnnotationType, EditorTool, OutputRatio, CropArea, CropAspectRatio, BorderType } from '../types';
 import { AnnotationShapes } from './annotation-shapes';
 import { SpotlightOverlay } from './spotlight-overlay';
 import { CropOverlay } from './crop-overlay';
@@ -17,6 +17,11 @@ interface EditorCanvasProps {
   outputRatio: OutputRatio;
   inset: number; // 0-50 percentage for screenshot scaling
   insetBackgroundColor?: string; // Background color revealed when inset > 0 (extracted from screenshot)
+  borderEnabled: boolean;
+  borderWeight: number;
+  borderColor: string;
+  borderOpacity: number;
+  borderType: BorderType;
   stageRef?: React.RefObject<Konva.Stage>;
   // Annotation props
   activeTool: EditorTool;
@@ -178,6 +183,11 @@ export function EditorCanvas({
   outputRatio,
   inset,
   insetBackgroundColor,
+  borderEnabled,
+  borderWeight,
+  borderColor,
+  borderOpacity,
+  borderType,
   stageRef,
   activeTool,
   annotations,
@@ -789,6 +799,28 @@ export function EditorCanvas({
                 displayWidth={innerWidth}
                 displayHeight={innerHeight}
               />
+
+              {/* Border rect - rendered above image */}
+              {borderEnabled && borderWeight > 0 && (() => {
+                // Calculate border offset based on type: outside (-0.5), center (0), inside (+0.5)
+                const offsetMultiplier = borderType === 'outside' ? -1 : borderType === 'inside' ? 1 : 0;
+                const offset = (borderWeight / 2) * offsetMultiplier;
+                // Adjust corner radius to match image's curve when border is offset
+                const borderCornerRadius = Math.max(0, cornerRadius - offset);
+                return (
+                  <Rect
+                    x={offset}
+                    y={offset}
+                    width={innerWidth - offset * 2}
+                    height={innerHeight - offset * 2}
+                    stroke={borderColor}
+                    strokeWidth={borderWeight}
+                    cornerRadius={borderCornerRadius}
+                    opacity={borderOpacity / 100}
+                    listening={false}
+                  />
+                );
+              })()}
             </Group>
 
             {/* Annotations */}
